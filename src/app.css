@@ -1,0 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+	font-family: 'DM Sans', system-ui, sans-serif;
+	color: #15354b;
+	background: #f7f4ec;
+	font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+a { color: inherit; }
+:focus-visible { outline: 3px solid #d69a36; outline-offset: 3px; }
+
+.display-font { font-family: 'Barlow Condensed', 'Arial Narrow', Impact, sans-serif; }
+.score-number { font-family: 'Barlow Condensed', 'Arial Narrow', Impact, sans-serif; font-variant-numeric: tabular-nums; }
+.app-shell { min-height: 100vh; background: #f7f4ec; }
+.site-width { width: min(100% - 2rem, 1216px); margin-inline: auto; }
+.eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
+.soft-line { border-color: #d9dedb; }
+.section-heading { font-family: 'Barlow Condensed', 'Arial Narrow', Impact, sans-serif; font-size: clamp(2rem, 3vw, 2.65rem); font-weight: 700; line-height: 1; letter-spacing: .005em; }
+
+@media (max-width: 640px) { .site-width { width: min(100% - 1.25rem, 1216px); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
