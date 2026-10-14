@@ -1,4 +1,5 @@
 import type { EventDetail } from './types.js';
+import { isEventDetail } from './validation.js';
 
 const STORAGE_PREFIX = 'sfim-counter:results:';
 
@@ -17,9 +18,11 @@ export function getCachedResults(compId: number): StoredResults | null {
 	try {
 		const raw = window.localStorage.getItem(getStorageKey(compId));
 		if (!raw) return null;
-		const parsed = JSON.parse(raw) as Partial<StoredResults>;
-		if (!Array.isArray(parsed.events) || typeof parsed.savedAt !== 'number') return null;
-		return { savedAt: parsed.savedAt, events: parsed.events as EventDetail[] };
+		const parsed = JSON.parse(raw) as { savedAt?: unknown; events?: unknown };
+		if (typeof parsed?.savedAt !== 'number' || !Array.isArray(parsed.events)) return null;
+		const events: unknown[] = parsed.events;
+		if (!events.every((event) => isEventDetail(event))) return null;
+		return { savedAt: parsed.savedAt, events: events as EventDetail[] };
 	} catch {
 		return null;
 	}

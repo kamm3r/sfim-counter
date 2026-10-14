@@ -547,3 +547,111 @@ describe('computeUngdomspokalen', () => {
 		expect(results.map((r) => r.club.Name)).toEqual(['Club A']);
 	});
 });
+
+describe('scoreEvent — feed edge cases', () => {
+	it('does not score negative, exponent or hexadecimal marks', () => {
+		for (const result of ['-0.5', '1e-3', '0xA']) {
+			const track = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [{ orgId: 1, orgName: 'Club A', result }] });
+			const field = makeEvent({ name: 'Kuula', category: 'Field', group: 'M', results: [{ orgId: 1, orgName: 'Club A', result }] });
+			expect(scoreEvent(track)[0]).toMatchObject({ isValid: false, totalPoints: 0 });
+			expect(scoreEvent(field)[0]).toMatchObject({ isValid: false, totalPoints: 0 });
+		}
+	});
+
+	it('rejects out-of-range time components but reads tenths in minute times', () => {
+		const event = makeEvent({ name: '800 m', category: 'Track', group: 'M', results: [
+			{ orgId: 1, orgName: 'Club A', result: '1.75,00' },
+			{ orgId: 2, orgName: 'Club B', result: '1:52.3' },
+			{ orgId: 3, orgName: 'Club C', result: '1.52,3' },
+		] });
+		const results = scoreEvent(event);
+		expect(results[0].isValid).toBe(false);
+		expect(results[1].parsedValue).toBe(112300);
+		expect(results[2].parsedValue).toBe(112300);
+	});
+
+	it('falls back to the heat wind when a sprint row has none', () => {
+		const event = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [
+			{ orgId: 1, orgName: 'Club A', result: '10.95' },
+		] });
+		event.Rounds[0].Heats[0].Wind = '+3,0';
+		expect(scoreEvent(event)[0]).toMatchObject({ placementPoints: 7, performanceClass: 'none', resultPoints: 0 });
+	});
+
+	it('checks jump attempt winds when the row wind is missing', () => {
+		const event = makeEvent({ name: 'N Pituus', category: 'Field', group: 'N', results: [
+			{ orgId: 1, orgName: 'Club A', result: '5.72', attempts: [
+				{ Line1: '5.72', Line2: '+2,2' },
+				{ Line1: '5.62', Line2: '+1,7' },
+			] },
+		] });
+		expect(scoreEvent(event)[0]).toMatchObject({ placementPoints: 7, performanceClass: 'none' });
+	});
+
+	it('ignores vertical failures above the last cleared height', () => {
+		const event = makeEvent({ name: 'Korkeus', category: 'Field', group: 'M', results: [
+			{ orgId: 1, orgName: 'Club A', result: '180', attempts: [
+				{ Line1: '170', Line2: 'o' },
+				{ Line1: '175', Line2: 'xo' },
+				{ Line1: '180', Line2: 'o' },
+				{ Line1: '185', Line2: 'xxx' },
+			] },
+			{ orgId: 2, orgName: 'Club B', result: '180', attempts: [
+				{ Line1: '170', Line2: 'xo' },
+				{ Line1: '175', Line2: 'xo' },
+				{ Line1: '180', Line2: 'o' },
+			] },
+		] });
+		const results = scoreEvent(event);
+		expect(results.find((r) => r.club.Name === 'Club A')).toMatchObject({ placement: 1, tieCount: 1 });
+		expect(results.find((r) => r.club.Name === 'Club B')).toMatchObject({ placement: 2, tieCount: 1 });
+	});
+
+	it('keeps equal horizontal mark series tied regardless of fouls', () => {
+		const event = makeEvent({ name: 'längd', category: 'Field', group: 'M', results: [
+			{ orgId: 1, orgName: 'Club A', result: '6.00', attempts: [
+				{ Line1: '6.00', Line2: null },
+				{ Line1: '5.50', Line2: null },
+			] },
+			{ orgId: 2, orgName: 'Club B', result: '6.00', attempts: [
+				{ Line1: 'x', Line2: null },
+				{ Line1: '6.00', Line2: null },
+				{ Line1: '5.50', Line2: null },
+			] },
+		] });
+		for (const result of scoreEvent(event)) {
+			expect(result).toMatchObject({ placement: 1, tieCount: 2, placementPoints: 6 });
+		}
+	});
+
+	it('ranks by marks when only some valid results have an official rank', () => {
+		const event = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [
+			{ orgId: 1, orgName: 'Club A', result: '10.50' },
+			{ orgId: 2, orgName: 'Club B', result: '10.60' },
+			{ orgId: 3, orgName: 'Club C', result: '10.70' },
+		] });
+		const [a, , c] = event.Rounds[0].Heats[0].Allocations;
+		a.ResultRank = 1;
+		c.ResultRank = 2;
+		expect(scoreEvent(event).map((r) => [r.placement, r.placementPoints])).toEqual([[1, 7], [2, 5], [3, 4]]);
+	});
+
+	it('scores only the latest preliminary round when no final exists', () => {
+		const event = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [] });
+		const round = (name: string, heats: ReturnType<typeof makeAlloc>[][]) => ({
+			...event.Rounds[0],
+			RoundTypeCategory: name,
+			Name: name,
+			Heats: heats.map((Allocations) => ({ Wind: '', Allocations })),
+		});
+		const heat = (orgId: number, result: string, rank: number) => ({ ...makeAlloc(orgId, `Club ${orgId}`, result, `Athlete ${orgId}`), ResultRank: rank });
+		event.Rounds = [
+			round('Qualification', [[heat(1, '10.40', 1)], [heat(2, '10.50', 1)]]),
+			round('Semifinal', [[heat(1, '10.30', 2)], [heat(2, '10.20', 1)]]),
+		];
+
+		const results = scoreEvent(event);
+		// Each athlete counts once, and heat-local ranks do not override the marks.
+		expect(results.map((r) => [r.club.Name, r.placement])).toEqual([['Club 1', 2], ['Club 2', 1]]);
+	});
+});
