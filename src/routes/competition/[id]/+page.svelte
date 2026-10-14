@@ -39,8 +39,14 @@
 	}));
 	let resultsQuery = createQuery(() => ({
 		queryKey: ['comp-results', compId],
-		queryFn: () => getResults(compId),
+		queryFn: async () => {
+			const results = await getResults(compId);
+			if (!isArchivedEventFeed) saveResultsSnapshot(compId, results);
+			return results;
+		},
+		// A restored snapshot keeps its original save time, so "last fetched" stays honest.
 		initialData: () => isArchivedEventFeed ? undefined : getCachedResults(compId)?.events,
+		initialDataUpdatedAt: () => isArchivedEventFeed ? undefined : getCachedResults(compId)?.savedAt,
 		refetchInterval: isArchivedEventFeed ? false : REFRESH_INTERVAL_MS,
 		refetchIntervalInBackground: true,
 		refetchOnWindowFocus: true
@@ -72,7 +78,6 @@
 	function formatUpdatedAt(timestamp: number | undefined): string { return timestamp ? formatTime(timestamp, $locale) : '—'; }
 	function errorMessage(error: unknown): string { return error instanceof Error ? error.message : copy.unknownError; }
 	async function refreshNow() { await Promise.all([resultsQuery.refetch(), eventsListQuery.refetch()]); }
-	$effect(() => { if (compId > 0 && !isArchivedEventFeed && resultsQuery.data?.length) saveResultsSnapshot(compId, resultsQuery.data); });
 </script>
 
 <svelte:head>
