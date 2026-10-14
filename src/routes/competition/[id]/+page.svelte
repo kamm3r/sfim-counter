@@ -1,12 +1,13 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
+	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { page } from '$app/stores';
 	import { getEvents, getResults, getCompetitionDetails } from '$lib/api.js';
 	import { getCachedResults, saveResultsSnapshot } from '$lib/result-storage.js';
+	import { createRefreshGuard, RefreshRejectedError } from '$lib/refresh-guard.js';
 	import { computeChampionship } from '$lib/scoring.js';
 	import { reconcileOfficial2026, SFIM_2026_OFFICIAL_SOURCES } from '$lib/official-standings.js';
 	import { getTuloslistaPublicUrl, SFIM_RESULTS_SERVICE_URL, SFIM_SOURCES } from '$lib/sfim-sources.js';
-	import type { ClubScore } from '$lib/types.js';
+	import type { ClubScore, EventDetail } from '$lib/types.js';
 	import Leaderboard from '$lib/components/Leaderboard.svelte';
 	import EventList from '$lib/components/EventList.svelte';
 	import ClubModal from '$lib/components/ClubModal.svelte';
@@ -35,20 +36,27 @@
 		queryFn: () => getEvents(compId),
 		enabled: !isArchivedEventFeed,
 		refetchInterval: isArchivedEventFeed ? false : REFRESH_INTERVAL_MS,
-		refetchIntervalInBackground: true
+		refetchIntervalInBackground: false
 	}));
+	const queryClient = useQueryClient();
+	const checkRefresh = createRefreshGuard();
 	let resultsQuery = createQuery(() => ({
 		queryKey: ['comp-results', compId],
 		queryFn: async () => {
 			const results = await getResults(compId);
-			if (!isArchivedEventFeed) saveResultsSnapshot(compId, results);
+			if (!isArchivedEventFeed) {
+				checkRefresh(queryClient.getQueryData<EventDetail[]>(['comp-results', compId]), results);
+				saveResultsSnapshot(compId, results);
+			}
 			return results;
 		},
 		// A restored snapshot keeps its original save time, so "last fetched" stays honest.
 		initialData: () => isArchivedEventFeed ? undefined : getCachedResults(compId)?.events,
 		initialDataUpdatedAt: () => isArchivedEventFeed ? undefined : getCachedResults(compId)?.savedAt,
 		refetchInterval: isArchivedEventFeed ? false : REFRESH_INTERVAL_MS,
-		refetchIntervalInBackground: true,
+		// Hidden tabs stop polling; returning to the tab refreshes immediately.
+		refetchIntervalInBackground: false,
+		retry: (failureCount, error) => !(error instanceof RefreshRejectedError) && failureCount < 3,
 		refetchOnWindowFocus: true
 	}));
 
@@ -65,9 +73,11 @@
 	let validResultCount = $derived(championship?.frihetspriset.eventBreakdown.reduce((total, event) => total + event.results.filter((result) => result.isValid).length, 0) ?? 0);
 	let unresolvedClubs = $derived((frihetspriset?.rankings ?? []).filter((club) => club.officialAdjustment !== 0).length + (ungdomspokalen?.rankings ?? []).filter((club) => club.officialAdjustment !== 0).length);
 
-	let selectedClub = $state<ClubScore | null>(null);
+	// Only the club name is kept, so an open club view follows each refresh.
+	let selectedClubName = $state<string | null>(null);
 	let selectedTrophy = $state<'frihetspriset' | 'ungdomspokalen'>('frihetspriset');
-	function openClub(club: ClubScore, trophy: 'frihetspriset' | 'ungdomspokalen') { selectedClub = club; selectedTrophy = trophy; }
+	let selectedClub = $derived(selectedClubName === null ? null : ((selectedTrophy === 'frihetspriset' ? frihetspriset : ungdomspokalen)?.rankings.find((entry) => entry.club.Name === selectedClubName) ?? null));
+	function openClub(club: ClubScore, trophy: 'frihetspriset' | 'ungdomspokalen') { selectedClubName = club.club.Name; selectedTrophy = trophy; }
 
 	let eventIdToMeta = $derived(eventsListQuery.data ? new Map(Object.entries(eventsListQuery.data).flatMap(([date, entries]) => entries.map((event) => [event.EventId, { date, name: event.EventName }]))) : new Map<number, { date: string; name: string }>());
 	let eventsWithMeta = $derived(events.map((event) => {
@@ -138,4 +148,4 @@
 	</main>
 </div>
 
-{#if selectedClub}<ClubModal club={selectedClub} trophy={selectedTrophy} eventDates={eventDates} sourceUrl={hasOfficialStandings ? SFIM_2026_OFFICIAL_SOURCES[selectedTrophy] : undefined} onclose={() => selectedClub = null} />{/if}
+{#if selectedClub}<ClubModal club={selectedClub} trophy={selectedTrophy} eventDates={eventDates} sourceUrl={hasOfficialStandings ? SFIM_2026_OFFICIAL_SOURCES[selectedTrophy] : undefined} onclose={() => selectedClubName = null} />{/if}

@@ -655,3 +655,30 @@ describe('scoreEvent — feed edge cases', () => {
 		expect(results.map((r) => [r.club.Name, r.placement])).toEqual([['Club 1', 2], ['Club 2', 1]]);
 	});
 });
+
+describe('scoreEvent — incomplete feeds', () => {
+	it('adds heat rows that the combined result list is missing', () => {
+		const event = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [
+			{ orgId: 1, orgName: 'Club A', result: '10.80' },
+			{ orgId: 2, orgName: 'Club B', result: '10.60' },
+		] });
+		const [a, b] = event.Rounds[0].Heats[0].Allocations;
+		a.Id = 1;
+		b.Id = 2;
+		event.Rounds[0].TotalResults = [{ ...a, ResultRank: 1 }];
+
+		const results = scoreEvent(event);
+		expect(results.map((r) => [r.club.Name, r.placement])).toEqual([['Club A', 2], ['Club B', 1]]);
+	});
+});
+
+describe('computeChampionship — club identity', () => {
+	it('keeps unregistered clubs (Id 0) apart by name', () => {
+		const event = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [
+			{ orgId: 0, orgName: 'Club A', result: '12.00' },
+			{ orgId: 0, orgName: 'Club B', result: '12.10' },
+		] });
+		const rankings = computeFrihetspriset([event]).rankings;
+		expect(rankings.map((club) => [club.club.Name, club.totalPoints])).toEqual([['Club A', 7], ['Club B', 5]]);
+	});
+});

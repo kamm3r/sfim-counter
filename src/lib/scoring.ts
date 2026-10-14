@@ -222,10 +222,16 @@ function getAllocations(event: EventDetail): { entries: RankedAllocation[]; even
 		for (const heat of round.Heats) {
 			for (const allocation of heat.Allocations) heatWindById.set(allocation.Id, heat.Wind ?? null);
 		}
-		if (round.TotalResults?.length) {
-			return round.TotalResults.map((allocation) => ({ allocation, heatWind: heatWindById.get(allocation.Id) ?? null }));
-		}
-		return round.Heats.flatMap((heat) => heat.Allocations.map((allocation) => ({ allocation, heatWind: heat.Wind ?? null })));
+		const heatEntries = round.Heats.flatMap((heat) => heat.Allocations.map((allocation) => ({ allocation, heatWind: heat.Wind ?? null })));
+		if (!round.TotalResults?.length) return heatEntries;
+
+		// The combined list can lag behind the heats. Heat rows it is missing
+		// are added, and the event is then ranked by marks (see sortResults).
+		const summarized = new Set(round.TotalResults.map((allocation) => allocation.Id));
+		return [
+			...round.TotalResults.map((allocation) => ({ allocation, heatWind: heatWindById.get(allocation.Id) ?? null })),
+			...heatEntries.filter((entry) => !summarized.has(entry.allocation.Id)),
+		];
 	});
 
 	// Ranks in separate preliminary heats are heat-local, not event-wide.
@@ -340,15 +346,22 @@ function toClubEventScore(event: EventDetail, result: ScoredResult): ClubEventSc
 	};
 }
 
-function addClubPoints(clubs: Map<number, ClubScore>, event: EventDetail, results: ScoredResult[]): void {
+// Tuloslista uses Id 0 for clubs without a registry entry, so those are kept
+// apart by name rather than merged into one club.
+function clubKey(club: ScoredResult['club']): string {
+	return club.Id > 0 ? `id:${club.Id}` : `name:${club.Name.trim().toLowerCase()}`;
+}
+
+function addClubPoints(clubs: Map<string, ClubScore>, event: EventDetail, results: ScoredResult[]): void {
 	for (const result of results) {
 		if (!result.isValid || result.totalPoints <= 0) continue;
-		const existing = clubs.get(result.club.Id);
+		const key = clubKey(result.club);
+		const existing = clubs.get(key);
 		if (existing) {
 			existing.totalPoints += result.totalPoints;
 			existing.events.push(toClubEventScore(event, result));
 		} else {
-			clubs.set(result.club.Id, {
+			clubs.set(key, {
 				club: result.club,
 				totalPoints: result.totalPoints,
 				events: [toClubEventScore(event, result)],
@@ -357,7 +370,7 @@ function addClubPoints(clubs: Map<number, ClubScore>, event: EventDetail, result
 	}
 }
 
-function finishTrophy(trophy: TrophyResult['trophy'], clubs: Map<number, ClubScore>, eventBreakdown: TrophyResult['eventBreakdown']): TrophyResult {
+function finishTrophy(trophy: TrophyResult['trophy'], clubs: Map<string, ClubScore>, eventBreakdown: TrophyResult['eventBreakdown']): TrophyResult {
 	return {
 		trophy,
 		rankings: [...clubs.values()].sort((a, b) => b.totalPoints - a.totalPoints),
@@ -368,8 +381,8 @@ function finishTrophy(trophy: TrophyResult['trophy'], clubs: Map<number, ClubSco
 // Single scoring seam for the live view and historical archive. Both trophies
 // share the same parsed result, rank and performance class for each athlete.
 export function computeChampionship(events: EventDetail[]): { frihetspriset: TrophyResult; ungdomspokalen: TrophyResult } {
-	const frihetClubs = new Map<number, ClubScore>();
-	const youthClubs = new Map<number, ClubScore>();
+	const frihetClubs = new Map<string, ClubScore>();
+	const youthClubs = new Map<string, ClubScore>();
 	const frihetEvents: TrophyResult['eventBreakdown'] = [];
 	const youthEvents: TrophyResult['eventBreakdown'] = [];
 
