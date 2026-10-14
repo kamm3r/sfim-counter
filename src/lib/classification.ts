@@ -46,7 +46,6 @@ const SENIOR_MEN: Record<string, Thresholds> = {
 	'400mhack': time('49.80', '52.30', '57.25'),
 	'3000mhinder': time('8:27.00', '9:03.00', '9:45.00'),
 	'5000mwalk': time(undefined, undefined, '23:30.00'),
-	'3x3000mwalk': time('42:30.00', '44:30.00', '47:00.00'),
 	'10000mwalk': time('40:30.00', '44:00.00', '49:30.00'),
 	'20kmwalk': time('1:21:30', '1:30:00', '1:42:00'),
 	'30kmwalk': time('2:09:00', '2:28:00', '2:43:00'),
@@ -75,9 +74,8 @@ const SENIOR_WOMEN: Record<string, Thresholds> = {
 	'100mhack': time('13.00', '13.75', '14.75'),
 	'400mhack': time('56.60', '60.60', '66.20'),
 	'3000mhinder': time('9:50.00', '10:30.00', '12:00.00'),
-	'5000mwalk': time(undefined, undefined, '26:30.00'),
+	'5000mwalk': time('21:55.00', '23:30.00', '26:30.00'),
 	'3000mwalk': time(undefined, undefined, '15:30.00'),
-	'3x3000mwalk': time('48:00.00', '50:00.00', '52:30.00'),
 	'10kmwalk': time('43:50.00', '49:00.00', '55:00.00'),
 	'20kmwalk': time('1:32:00', '1:44:00', '1:58:00'),
 	highJump: distance(189, 179, 168),
@@ -179,12 +177,21 @@ const JUNIOR_A: Record<Exclude<ClassificationGroup, 'senior'>, Record<string, nu
 	},
 };
 
-const SENIOR_RELAY: Record<string, Thresholds> = {
+// Relay teams have no SM class; the table's columns are M, A, B and C.
+const SENIOR_RELAY_MEN: Record<string, Thresholds> = {
 	'4x100m': { M: parseTime('41.30'), A: parseTime('43.80') },
 	'4x400m': { M: parseTime('3:20.00'), A: parseTime('3:32.00') },
 	'4x800m': { M: parseTime('7:40.00'), A: parseTime('8:20.00') },
 	'4x1500m': { M: parseTime('16:00.00'), A: parseTime('17:05.00') },
 	'4x100mhack': { M: parseTime('61.00'), A: parseTime('65.00') },
+	'3x3000mwalk': { M: parseTime('42:30.00'), A: parseTime('44:30.00') },
+};
+
+const SENIOR_RELAY_WOMEN: Record<string, Thresholds> = {
+	'4x100m': { M: parseTime('47.30'), A: parseTime('51.20') },
+	'4x400m': { M: parseTime('3:48.00'), A: parseTime('4:15.00') },
+	'4x800m': { M: parseTime('9:08.00'), A: parseTime('10:10.00') },
+	'3x3000mwalk': { M: parseTime('48:00.00'), A: parseTime('50:00.00') },
 };
 
 const JUNIOR_RELAY_A: Record<Exclude<ClassificationGroup, 'senior'>, Record<string, number>> = {
@@ -351,7 +358,7 @@ function getThresholds(
 ): Thresholds | null {
 	const classificationGroup = normalizeGroup(group);
 	if (classificationGroup === 'senior') {
-		if (category === 'Relay') return SENIOR_RELAY[eventKey] ?? null;
+		if (category === 'Relay') return (isFemale ? SENIOR_RELAY_WOMEN : SENIOR_RELAY_MEN)[eventKey] ?? null;
 		return (isFemale ? SENIOR_WOMEN : SENIOR_MEN)[eventKey] ?? null;
 	}
 
