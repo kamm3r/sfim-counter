@@ -39,7 +39,7 @@ const sv = {
 	openResults: 'Öppna poäng och grenresultat', yearByYear: '02 / År för år', sourceArchive: 'Källarkiv',
 	archiveIntro: 'Resultatprotokoll finns för äldre år, ibland uppdelade per tävlingsdag. De går att läsa hos källan men har ännu inte importerats till appens poängtabeller.',
 	cancelledChampionship: 'Mästerskapet inställt', dateMissing: 'Datum saknas', cancelled: 'Inställt', externalArchive: 'Externt arkiv', partiallyPreserved: 'Delvis bevarat',
-	source: 'Källa', results: 'Resultat', day: 'Dag', combinedEvents: 'Mångkamp', footer: 'En fristående prototyp för att följa den svenskfinländska friidrotten.',
+	source: 'Källa', results: 'Resultat', day: 'Dag', combinedEvents: 'Mångkamp', notInFrihetspriset: 'Räknas inte i Frihetspriset', footer: 'En fristående prototyp för att följa den svenskfinländska friidrotten.',
 	allChampionships: 'Alla mästerskap', championshipArchive: 'Mästerskapsarkiv', ongoingProvisional: 'Pågående tävling · preliminärt',
 	officialFinalCalculatedEvents: 'Officiell slutställning · beräknade grenrader', archivedCalculated: 'Arkiverade resultat · beräknade poäng', fetchingResults: 'Hämtar nya resultat',
 	liveRefresh: 'Liveflöde · uppdateras var 15:e sekund', refreshNow: 'Uppdatera nu', eventsWithResults: 'Grenar med resultat', resultRows: 'Resultatrader',
@@ -85,7 +85,7 @@ const fi: Copy = {
 	openResults: 'Avaa pisteet ja lajitulokset', yearByYear: '02 / Vuosi vuodelta', sourceArchive: 'Lähdearkisto',
 	archiveIntro: 'Vanhempien vuosien tulosluettelot ovat luettavissa lähdesivustoilla, joskus kilpailupäivittäin. Niitä ei ole vielä tuotu sovelluksen pistetaulukoihin.',
 	cancelledChampionship: 'Mestaruuskilpailu peruttu', dateMissing: 'Päivämäärä puuttuu', cancelled: 'Peruttu', externalArchive: 'Ulkoinen arkisto', partiallyPreserved: 'Säilynyt osittain',
-	source: 'Lähde', results: 'Tulokset', day: 'Päivä', combinedEvents: 'Moniottelu', footer: 'Itsenäinen prototyyppi suomenruotsalaisen yleisurheilun seuraamiseen.',
+	source: 'Lähde', results: 'Tulokset', day: 'Päivä', combinedEvents: 'Moniottelu', notInFrihetspriset: 'Ei lasketa Frihetspriset-pisteisiin', footer: 'Itsenäinen prototyyppi suomenruotsalaisen yleisurheilun seuraamiseen.',
 	allChampionships: 'Kaikki mestaruuskilpailut', championshipArchive: 'Mestaruusarkisto', ongoingProvisional: 'Käynnissä oleva kilpailu · alustava',
 	officialFinalCalculatedEvents: 'Virallinen loppusijoitus · lasketut lajipisteet', archivedCalculated: 'Arkistoidut tulokset · lasketut pisteet', fetchingResults: 'Haetaan uusia tuloksia',
 	liveRefresh: 'Live-tulokset · päivittyy 15 sekunnin välein', refreshNow: 'Päivitä nyt', eventsWithResults: 'Lajit, joissa on tuloksia', resultRows: 'Tuloksia',
@@ -129,7 +129,7 @@ const en: Copy = {
 	openResults: 'Open points and event results', yearByYear: '02 / Year by year', sourceArchive: 'Source archive',
 	archiveIntro: 'Older results sheets are available at their sources, sometimes split by competition day. They have not yet been imported into the app’s points tables.',
 	cancelledChampionship: 'Championship cancelled', dateMissing: 'Date unavailable', cancelled: 'Cancelled', externalArchive: 'External archive', partiallyPreserved: 'Partially preserved',
-	source: 'Source', results: 'Results', day: 'Day', combinedEvents: 'Combined events', footer: 'An independent prototype for following Finland-Swedish athletics.',
+	source: 'Source', results: 'Results', day: 'Day', combinedEvents: 'Combined events', notInFrihetspriset: 'Not counted in Frihetspriset', footer: 'An independent prototype for following Finland-Swedish athletics.',
 	allChampionships: 'All championships', championshipArchive: 'Championship archive', ongoingProvisional: 'Competition in progress · provisional',
 	officialFinalCalculatedEvents: 'Official final standings · calculated event lines', archivedCalculated: 'Archived results · calculated points', fetchingResults: 'Fetching new results',
 	liveRefresh: 'Live feed · refreshes every 15 seconds', refreshNow: 'Refresh now', eventsWithResults: 'Events with results', resultRows: 'Result entries',
@@ -167,8 +167,12 @@ export function fill(template: string, values: Record<string, string | number>):
 	return template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? `{${key}}`));
 }
 
+// Shared placings produce thirds and other repeating fractions. Two decimals are
+// shown, and a value that still is not exact is marked as approximate.
 export function formatPoints(value: number, selected: Locale): string {
-	return new Intl.NumberFormat(localeTags[selected], { maximumFractionDigits: 1 }).format(value);
+	const rounded = Math.round(value * 100) / 100;
+	const formatted = new Intl.NumberFormat(localeTags[selected], { maximumFractionDigits: 2 }).format(rounded);
+	return Math.abs(value - rounded) < 1e-9 ? formatted : `≈${formatted}`;
 }
 
 export function formatDate(value: string | Date, selected: Locale): string {

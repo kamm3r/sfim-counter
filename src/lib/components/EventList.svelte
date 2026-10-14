@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { EventDetail, ScoredResult, TrophyResult } from '$lib/types.js';
-	import { isJuniorGroup } from '$lib/classification.js';
+	import { isCombinedEvent, isJuniorGroup } from '$lib/classification.js';
 	import { locale, getCopy, fill, formatPoints } from '$lib/i18n.js';
 	import Search from '@lucide/svelte/icons/search';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
@@ -58,7 +58,7 @@
 					<span class="flex h-7 w-7 shrink-0 items-center justify-center border border-[#d9dedb] text-[#27778a]"><ChevronDown class={openEvent === event.Id ? 'h-4 w-4 transition-transform' : 'h-4 w-4 -rotate-90 transition-transform'} /></span>
 					<span class="min-w-0 flex-1">
 						<span class="block truncate text-sm font-semibold">{event.displayName}</span>
-						<span class="text-xs text-[#607782]">{isJunior ? copy.junior : copy.senior} · {event.date}</span>
+						<span class="text-xs text-[#607782]">{isJunior ? copy.junior : copy.senior} · {event.date}{isCombinedEvent(event.Name) ? ` · ${copy.notInFrihetspriset}` : ''}</span>
 					</span>
 					<span class="score-number text-lg font-semibold text-[#607782]">{results.filter((r) => r.isValid).length}</span>
 				<span class="hidden text-xs text-[#607782] sm:inline">{copy.resultCount}</span>

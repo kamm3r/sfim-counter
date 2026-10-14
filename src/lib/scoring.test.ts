@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scoreEvent, computeFrihetspriset, computeUngdomspokalen } from './scoring.js';
+import { scoreEvent, computeFrihetspriset, computeUngdomspokalen, clubPositions } from './scoring.js';
 import type { EventDetail, Organization } from './types.js';
 
 function makeOrg(id: number, name: string, short: string): Organization {
@@ -680,5 +680,11 @@ describe('computeChampionship — club identity', () => {
 		] });
 		const rankings = computeFrihetspriset([event]).rankings;
 		expect(rankings.map((club) => [club.club.Name, club.totalPoints])).toEqual([['Club A', 7], ['Club B', 5]]);
+	});
+});
+
+describe('clubPositions', () => {
+	it('gives equal totals a shared position and skips the next one', () => {
+		expect(clubPositions([20, 15, 15, 9, 16 / 3 * 3, 16].map((totalPoints) => ({ totalPoints })))).toEqual([1, 2, 2, 4, 5, 5]);
 	});
 });

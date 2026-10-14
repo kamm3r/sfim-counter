@@ -180,6 +180,8 @@ describe('Frihetspriset event eligibility', () => {
 		expect(club.totalPoints).toBe(12);
 		expect(club.events).toHaveLength(1);
 		expect(result.eventBreakdown).toHaveLength(2);
+		// The breakdown keeps the placing but shows no points that the total omits.
+		expect(result.eventBreakdown[0].results[0]).toMatchObject({ placement: 1, totalPoints: 0 });
 	});
 });
 

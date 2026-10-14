@@ -9,12 +9,13 @@
 // unless --force is given, and the file is replaced atomically.
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { isEventDetail } from '../src/lib/validation.ts';
+import { PINNED_ARCHIVES } from '../src/lib/archives.ts';
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
 const year = Number(args.find((arg) => !arg.startsWith('--')) ?? 2026);
-const competitionId = { 2025: 17448, 2026: 19929 }[year];
-if (!competitionId) throw new Error('Supported years: 2025, 2026');
+const competitionId = PINNED_ARCHIVES.find((archive) => archive.year === year)?.competitionId;
+if (!competitionId) throw new Error(`Add ${year} to src/lib/archives.ts first. Pinned years: ${PINNED_ARCHIVES.map((archive) => archive.year).join(', ')}`);
 const base = 'https://cached-public-api.tuloslista.com/live/v1';
 const fixtureUrl = new URL(`../src/lib/sfim-${year}.fixture.json`, import.meta.url);
 

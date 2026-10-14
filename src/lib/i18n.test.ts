@@ -16,6 +16,9 @@ describe('site languages', () => {
 		expect(formatPoints(180.5, 'sv')).toBe('180,5');
 		expect(formatPoints(180.5, 'fi')).toBe('180,5');
 		expect(formatPoints(180.5, 'en')).toBe('180.5');
+		expect(formatPoints(16, 'en')).toBe('16');
+		expect(formatPoints(16 / 3, 'en')).toBe('≈5.33');
+		expect(formatPoints((16 / 3) * 3, 'en')).toBe('16');
 		expect(formatDate('2026-07-09T22:30:00Z', 'en')).toBe('10/07/2026');
 		expect(fill(getCopy('en').showFullTable, { count: 12 })).toBe('Show full table · 12 clubs');
 		expect(archiveLinkLabel('Dag 2', 'fi')).toBe('Päivä 2');

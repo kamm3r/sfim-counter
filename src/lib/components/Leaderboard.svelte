@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ClubScore } from '$lib/types.js';
 	import { locale, getCopy, fill, formatPoints } from '$lib/i18n.js';
+	import { clubPositions } from '$lib/scoring.js';
 	let copy = $derived(getCopy($locale));
 
 	let { title, variant, rankings, sourceUrl, onclubclick }: {
@@ -14,6 +15,13 @@
 	let leader = $derived(rankings[0]);
 	let topThree = $derived(rankings.slice(0, 3));
 	let remainder = $derived(rankings.slice(3));
+	let positions = $derived(clubPositions(rankings));
+	// Tied clubs share a position, marked with "=".
+	function positionLabel(index: number): string {
+		const position = String(positions[index]).padStart(2, '0');
+		const tied = positions[index - 1] === positions[index] || positions[index + 1] === positions[index];
+		return tied ? `=${position}` : position;
+	}
 </script>
 
 <section class="overflow-hidden border border-[#d9dedb] bg-white" aria-label={title}>
@@ -30,7 +38,7 @@
 	{#if leader}
 		<button type="button" onclick={() => onclubclick(leader)} class="group flex w-full items-end justify-between gap-3 bg-[#15354b] px-5 py-5 text-left text-white hover:bg-[#21465b] sm:px-6">
 			<div class="min-w-0">
-				<p class="eyebrow text-[#adc7ce]">01 / {copy.leader}</p>
+				<p class="eyebrow text-[#adc7ce]">{positionLabel(0)} / {copy.leader}</p>
 				<p class="display-font mt-1 truncate text-[2rem] font-bold leading-none sm:text-[2.35rem]">{leader.club.Name}</p>
 				<p class="mt-2 text-xs text-[#c7d9db]">{copy.showScoringResults} ↗</p>
 			</div>
@@ -43,7 +51,7 @@
 	<div class="divide-y divide-[#e4e8e5]">
 		{#each topThree.slice(1) as club, i}
 			<button type="button" onclick={() => onclubclick(club)} class="flex w-full items-center gap-3 px-5 py-3.5 text-left hover:bg-[#f7f4ec] sm:px-6">
-				<span class="score-number w-7 text-xl font-bold text-[#607782]">0{i + 2}</span>
+				<span class="score-number w-9 text-xl font-bold text-[#607782]">{positionLabel(i + 1)}</span>
 				<span class="min-w-0 flex-1 truncate text-sm font-semibold">{club.club.Name}</span>
 				<span class="score-number text-2xl font-bold">{formatPoints(club.totalPoints, $locale)}</span>
 				<span class="text-xs text-[#607782]" aria-hidden="true">↗</span>
@@ -56,7 +64,7 @@
 			<div class="divide-y divide-[#e4e8e5] border-t border-[#d9dedb]">
 				{#each remainder as club, i}
 					<button type="button" onclick={() => onclubclick(club)} class="flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-[#f7f4ec] sm:px-6">
-						<span class="score-number w-7 text-lg font-semibold text-[#607782]">{String(i + 4).padStart(2, '0')}</span>
+						<span class="score-number w-9 text-lg font-semibold text-[#607782]">{positionLabel(i + 3)}</span>
 						<span class="min-w-0 flex-1 truncate text-sm">{club.club.Name}</span>
 						<span class="score-number text-xl font-semibold">{formatPoints(club.totalPoints, $locale)}</span>
 						<span class="text-xs text-[#607782]" aria-hidden="true">↗</span>

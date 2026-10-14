@@ -370,10 +370,26 @@ function addClubPoints(clubs: Map<string, ClubScore>, event: EventDetail, result
 	}
 }
 
+// Split placement points (e.g. 16 / 3) leave floating-point noise in sums.
+function samePoints(a: number, b: number): boolean {
+	return Math.abs(a - b) < 1e-9;
+}
+
+// Competition ranking for the club table: equal totals share a position and
+// the next club skips accordingly (1, 2, 2, 4).
+export function clubPositions(rankings: { totalPoints: number }[]): number[] {
+	return rankings.map((club, index) => {
+		let first = index;
+		while (first > 0 && samePoints(rankings[first - 1].totalPoints, club.totalPoints)) first--;
+		return first + 1;
+	});
+}
+
 function finishTrophy(trophy: TrophyResult['trophy'], clubs: Map<string, ClubScore>, eventBreakdown: TrophyResult['eventBreakdown']): TrophyResult {
 	return {
 		trophy,
-		rankings: [...clubs.values()].sort((a, b) => b.totalPoints - a.totalPoints),
+		rankings: [...clubs.values()].sort((a, b) =>
+			samePoints(a.totalPoints, b.totalPoints) ? a.club.Name.localeCompare(b.club.Name) : b.totalPoints - a.totalPoints),
 		eventBreakdown,
 	};
 }
@@ -388,8 +404,13 @@ export function computeChampionship(events: EventDetail[]): { frihetspriset: Tro
 
 	for (const event of events) {
 		const results = scoreEvent(event);
-		frihetEvents.push({ eventName: event.Name, eventId: event.Id, results });
-		if (!isCombinedEvent(event.Name)) addClubPoints(frihetClubs, event, results);
+		// Combined events keep their placings but award no Frihetspriset points,
+		// so the event breakdown matches the club totals.
+		const frihetResults = isCombinedEvent(event.Name)
+			? results.map((result) => ({ ...result, placementPoints: 0, resultPoints: 0, totalPoints: 0 }))
+			: results;
+		frihetEvents.push({ eventName: event.Name, eventId: event.Id, results: frihetResults });
+		addClubPoints(frihetClubs, event, frihetResults);
 		if (!isJuniorGroup(event.Group || event.Name)) continue;
 
 		const youthResults = results.map((result) => {

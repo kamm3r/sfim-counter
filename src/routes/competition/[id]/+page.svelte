@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { getEvents, getResults, getCompetitionDetails } from '$lib/api.js';
 	import { getCachedResults, saveResultsSnapshot } from '$lib/result-storage.js';
+	import { getPinnedArchive } from '$lib/archives.js';
 	import { createRefreshGuard, RefreshRejectedError } from '$lib/refresh-guard.js';
 	import { computeChampionship } from '$lib/scoring.js';
 	import { reconcileOfficial2026, SFIM_2026_OFFICIAL_SOURCES } from '$lib/official-standings.js';
@@ -18,12 +19,12 @@
 	import RotateCw from '@lucide/svelte/icons/rotate-cw';
 
 	const REFRESH_INTERVAL_MS = 15_000;
-	const ARCHIVED_COMPETITIONS = new Set([17448, 19929]);
 	let compId = $derived(Number($page.params.id));
 	let copy = $derived(getCopy($locale));
 	let source = $derived(SFIM_SOURCES.find((entry) => entry.competitionId === compId));
-	let isArchivedEventFeed = $derived(ARCHIVED_COMPETITIONS.has(compId));
-	let hasOfficialStandings = $derived(compId === 19929);
+	let archive = $derived(getPinnedArchive(compId));
+	let isArchivedEventFeed = $derived(archive !== undefined);
+	let hasOfficialStandings = $derived(archive?.hasOfficialStandings ?? false);
 
 	let detailsQuery = createQuery(() => ({
 		queryKey: ['comp-details', compId],
@@ -68,7 +69,8 @@
 	let competitionName = $derived(source ? fill(copy.championship, { year: source.year }) : detailsQuery.data?.Competition.Name ?? fill(copy.competition, { id: compId }));
 	let organizationName = $derived(detailsQuery.data?.Competition.Organization ?? source?.organizer ?? '');
 	let catalogEvents = $derived(Object.values(eventsListQuery.data ?? {}).flat());
-	let expectedEventCount = $derived(compId === 19929 ? 97 : compId === 17448 ? 106 : new Set(catalogEvents.map((event) => event.EventId)).size);
+	// A pinned archive is the complete final feed, so its own size is the expected count.
+	let expectedEventCount = $derived(isArchivedEventFeed ? new Set(events.map((event) => event.Id)).size : new Set(catalogEvents.map((event) => event.EventId)).size);
 	let loadedEventCount = $derived(new Set(events.map((event) => event.Id)).size);
 	let validResultCount = $derived(championship?.frihetspriset.eventBreakdown.reduce((total, event) => total + event.results.filter((result) => result.isValid).length, 0) ?? 0);
 	let unresolvedClubs = $derived((frihetspriset?.rankings ?? []).filter((club) => club.officialAdjustment !== 0).length + (ungdomspokalen?.rankings ?? []).filter((club) => club.officialAdjustment !== 0).length);
@@ -138,7 +140,7 @@
 					{#if ungdomspokalen}<Leaderboard title="Ungdomspokalen" variant="youth" rankings={ungdomspokalen.rankings} onclubclick={(club) => openClub(club, 'ungdomspokalen')} sourceUrl={hasOfficialStandings ? SFIM_2026_OFFICIAL_SOURCES.ungdomspokalen : undefined} />{/if}
 				</div>
 					{#if hasOfficialStandings}<div class="mt-5 flex flex-wrap items-start justify-between gap-3 border-l-4 border-[#27778a] bg-[#e8f1f1] p-4 text-sm"><p class="max-w-3xl"><strong>{copy.read2026}</strong> {fill(copy.official2026Note, { count: unresolvedClubs })}</p><a href="#sa-raknas-poangen" class="shrink-0 font-semibold text-[#27778a] underline-offset-4 hover:underline">{copy.aboutCalculation}</a></div>{/if}
-					{#if compId === 17448}<div class="mt-5 border-l-4 border-[#d69a36] bg-[#fff1cf] p-4 text-sm"><strong>{copy.archive2025}</strong> {copy.archive2025Note}</div>{/if}
+					{#if archive?.year === 2025}<div class="mt-5 border-l-4 border-[#d69a36] bg-[#fff1cf] p-4 text-sm"><strong>{copy.archive2025}</strong> {copy.archive2025Note}</div>{/if}
 			</section>
 
 				<section id="results" class="scroll-mt-6 pt-14"><div class="mb-5 flex flex-wrap items-end justify-between gap-3"><div><p class="eyebrow text-[#c64f3d]">{copy.everyStart}</p><h2 class="section-heading mt-1">{copy.resultsByEvent}</h2></div><p class="max-w-sm text-sm text-[#607782]">{copy.resultsNote}</p></div><EventList events={eventsWithMeta} frihetBreakdown={championship?.frihetspriset.eventBreakdown ?? []} youthBreakdown={championship?.ungdomspokalen.eventBreakdown ?? []} /></section>

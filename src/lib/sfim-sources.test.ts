@@ -5,6 +5,7 @@ import {
 	getTuloslistaPublicUrl,
 	SFIM_SOURCES
 } from './sfim-sources.js';
+import { PINNED_ARCHIVES } from './archives.js';
 
 describe('SFIM source registry', () => {
 	it('keeps the years in descending order without duplicates', () => {
@@ -51,5 +52,16 @@ describe('SFIM source registry', () => {
 		expect(getSfimSource(2021)?.resultsUrl).toBe('https://live.tuloslista.com/9630');
 		expect(getSfimSource(2003)?.resultsUrl).toContain('ulog=2325');
 		expect(getSfimSource(2002)?.resultsUrl).toContain('ulog=844');
+	});
+});
+
+describe('pinned archives', () => {
+	it('are archived registry entries with a fixture file', async () => {
+		const fixtures = import.meta.glob('./sfim-*.fixture.json');
+		for (const archive of PINNED_ARCHIVES) {
+			const source = SFIM_SOURCES.find((entry) => entry.competitionId === archive.competitionId);
+			expect(source, String(archive.year)).toMatchObject({ year: archive.year, status: 'archive' });
+			expect(fixtures[`./sfim-${archive.year}.fixture.json`], String(archive.year)).toBeDefined();
+		}
 	});
 });
