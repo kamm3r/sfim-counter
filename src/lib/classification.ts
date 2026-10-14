@@ -183,7 +183,6 @@ const SENIOR_RELAY_MEN: Record<string, Thresholds> = {
 	'4x400m': { M: parseTime('3:20.00'), A: parseTime('3:32.00') },
 	'4x800m': { M: parseTime('7:40.00'), A: parseTime('8:20.00') },
 	'4x1500m': { M: parseTime('16:00.00'), A: parseTime('17:05.00') },
-	'4x100mhack': { M: parseTime('61.00'), A: parseTime('65.00') },
 	'3x3000mwalk': { M: parseTime('42:30.00'), A: parseTime('44:30.00') },
 };
 
