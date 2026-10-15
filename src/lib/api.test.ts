@@ -29,13 +29,17 @@ describe('nested result validation', () => {
 		Id: 1, Name: 'M 100m', Group: 'M', BeginDateTimeWithTZ: '2026-07-10', EventCategory: 'Track',
 		Rounds: [{ Name: 'Final', RoundTypeCategory: 'Final', Heats: [{ Allocations: [allocation] }] }],
 	});
-	const allocation = { Name: 'A Athlete', Organization: { Id: 1, Name: 'Club A' }, Result: '10.50', NotInCompetition: false };
+	const allocation = { Id: 1, Name: 'A Athlete', Organization: { Id: 1, Name: 'Club A' }, Result: '10.50', NotInCompetition: false };
 
 	it('accepts a well-formed allocation', () => {
 		expect(isEventDetail(event(allocation), 1)).toBe(true);
 	});
 
 	it.each([
+		['a missing allocation id', { ...allocation, Id: undefined }],
+		['a null allocation id', { ...allocation, Id: null }],
+		['a fractional allocation id', { ...allocation, Id: 1.5 }],
+		['a negative allocation id', { ...allocation, Id: -1 }],
 		['a missing club', { ...allocation, Organization: null }],
 		['a numeric result', { ...allocation, Result: 10.5 }],
 		['malformed attempts', { ...allocation, Attempts: [null] }],

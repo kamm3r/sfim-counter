@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ClubEntry, Trophy } from '$lib/club-entries.js';
+	import { TROPHIES } from '$lib/trophies.js';
 	import { calculated2026Split, official2026Split } from '$lib/official-standings.js';
 	import { locale, getCopy, fill, formatDay, formatPoints, translateEventName } from '$lib/i18n.js';
 
@@ -11,7 +12,7 @@
 		onclose?: () => void;
 	} = $props();
 
-	const TITLES: Record<Trophy, string> = { frihetspriset: 'Frihetspriset', ungdomspokalen: 'Ungdomspokalen' };
+	const TITLES = Object.fromEntries(TROPHIES.map(({ key, name }) => [key, name])) as Record<Trophy, string>;
 	let copy = $derived(getCopy($locale));
 	// The tab follows the trophy the club was opened from, but can be switched here.
 	let active = $state<Trophy>('frihetspriset');
@@ -69,8 +70,8 @@
 	</div>
 
 	<div class="tabs" role="tablist" aria-label={copy.standings}>
-		{#each ['frihetspriset', 'ungdomspokalen'] as const as key}
-			<button type="button" role="tab" aria-selected={active === key} disabled={!entries[key]} onclick={() => { active = key; showAll = false; }}>{TITLES[key]}</button>
+		{#each TROPHIES as { key, name }}
+			<button type="button" role="tab" aria-selected={active === key} disabled={!entries[key]} onclick={() => { active = key; showAll = false; }}>{name}</button>
 		{/each}
 	</div>
 

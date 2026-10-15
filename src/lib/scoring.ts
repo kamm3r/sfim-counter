@@ -11,6 +11,13 @@ import type {
 } from './types.js';
 import { classifyResult, isCentimetreEvent, isCombinedEvent, isJuniorGroup, normalizeEventName } from './classification.js';
 
+// A start list is not a result. Non-results such as DNS and DQ still record
+// an outcome, so they count when selecting rounds and checking refreshes.
+export function roundHasResults(round: Round): boolean {
+	return [...(round.TotalResults ?? []), ...round.Heats.flatMap((heat) => heat.Allocations)]
+		.some((allocation) => Boolean(allocation.Result?.trim()));
+}
+
 const INVALID_RESULTS = new Set(['DNS', 'DQ', 'DNF', 'DSQ', 'NH', 'NM', '']);
 
 type FieldTieBreaker = {
@@ -131,14 +138,20 @@ function parseResult(value: string | null | undefined, eventName: string, catego
 	return parseFieldResult(value, eventName);
 }
 
+// A result scores when it is in competition and parses to a real mark
+// (parseResult returns null for unreadable marks and -1 for DNS/DQ/DNF).
+function isScoringResult(allocation: Allocation, value: number | null): boolean {
+	return !allocation.NotInCompetition && value !== null && value !== -1 && value !== 0;
+}
+
 function getGender(group: string): 'male' | 'female' {
 	const upper = group.toUpperCase().trim();
 	if (upper.startsWith('M') || upper.startsWith('H') || upper.startsWith('P')) return 'male';
 	return 'female';
 }
 
-const SENIOR_PLACEMENT_POINTS = [7, 5, 4, 3, 2, 1];
-const JUNIOR_PLACEMENT_POINTS = [3, 2, 1];
+export const SENIOR_PLACEMENT_POINTS = [7, 5, 4, 3, 2, 1];
+export const JUNIOR_PLACEMENT_POINTS = [3, 2, 1];
 
 function getPlacementPointsForPosition(pos: number, points: number[]): number {
 	return pos >= 1 && pos <= points.length ? points[pos - 1] : 0;
@@ -153,20 +166,21 @@ function getAveragePlacementPoints(startPlacement: number, tieCount: number, poi
 	return total / tieCount;
 }
 
+// Result bonuses per trophy. Junior Frihetspriset bonuses need a top-three placing.
+export const FRIHET_SENIOR_BONUS = { SM: 15, M: 10, A: 5 } as const;
+export const FRIHET_JUNIOR_A_BONUS = 3;
+export const FRIHET_JUNIOR_BONUS_MAX_PLACE = 3;
+export const YOUTH_A_BONUS = 5;
+
 function getFrihetsprisetResultPoints(perfClass: string, ageClass: 'senior' | 'junior', placement: number): number {
 	if (ageClass === 'junior') {
-		if (perfClass === 'A' && placement <= 3) return 3;
-		return 0;
+		return perfClass === 'A' && placement <= FRIHET_JUNIOR_BONUS_MAX_PLACE ? FRIHET_JUNIOR_A_BONUS : 0;
 	}
-	if (perfClass === 'SM') return 15;
-	if (perfClass === 'M') return 10;
-	if (perfClass === 'A') return 5;
-	return 0;
+	return FRIHET_SENIOR_BONUS[perfClass as keyof typeof FRIHET_SENIOR_BONUS] ?? 0;
 }
 
 function getUngdomspokalenResultPoints(perfClass: string): number {
-	if (perfClass === 'A') return 5;
-	return 0;
+	return perfClass === 'A' ? YOUTH_A_BONUS : 0;
 }
 
 function compareFieldTieBreakers(a: FieldTieBreaker, b: FieldTieBreaker): number {
@@ -206,16 +220,13 @@ function sortResults(results: InternalScoredResult[]): InternalScoredResult[] {
 	});
 }
 
-function hasResults(round: Round): boolean {
-	return Boolean(round.TotalResults?.length) || round.Heats.some((heat) => heat.Allocations.length > 0);
-}
-
-// Scores one stage only. Without a final, the latest round with results gives
-// provisional standings; earlier rounds would count the same athletes again.
+// Scores one stage only. Until a final records an outcome, the latest round
+// with results gives provisional standings. Keep start lists if no round has results.
 function getAllocations(event: EventDetail): { entries: RankedAllocation[]; eventWideRanks: boolean } {
-	const finals = event.Rounds.filter((r) => r.RoundTypeCategory === 'Final');
-	const latest = event.Rounds.filter(hasResults).at(-1);
+	const finals = event.Rounds.filter((r) => r.RoundTypeCategory === 'Final' && roundHasResults(r));
+	const latest = event.Rounds.filter(roundHasResults).at(-1) ?? event.Rounds.at(-1);
 	const rounds = finals.length ? finals : latest ? [latest] : [];
+	let incompleteSummary = false;
 
 	const entries = rounds.flatMap((round): RankedAllocation[] => {
 		const heatWindById = new Map<number, string | null>();
@@ -228,14 +239,27 @@ function getAllocations(event: EventDetail): { entries: RankedAllocation[]; even
 		// The combined list can lag behind the heats. Heat rows it is missing
 		// are added, and the event is then ranked by marks (see sortResults).
 		const summarized = new Set(round.TotalResults.map((allocation) => allocation.Id));
+		const missing = heatEntries.filter((entry) => !summarized.has(entry.allocation.Id));
+		const isScoringEntry = ({ allocation }: RankedAllocation) =>
+			isScoringResult(allocation, parseResult(allocation.Result, event.Name, event.EventCategory));
+		if (missing.some(isScoringEntry)) incompleteSummary = true;
+		const heatById = new Map(heatEntries.map((entry) => [entry.allocation.Id, entry]));
 		return [
-			...round.TotalResults.map((allocation) => ({ allocation, heatWind: heatWindById.get(allocation.Id) ?? null })),
-			...heatEntries.filter((entry) => !summarized.has(entry.allocation.Id)),
+			...round.TotalResults.map((allocation) => {
+				const heatEntry = heatById.get(allocation.Id);
+				if (!allocation.Result?.trim() && heatEntry?.allocation.Result?.trim()) {
+					// A summary start-list row can lag behind a recorded heat outcome.
+					if (isScoringEntry(heatEntry)) incompleteSummary = true;
+					return heatEntry;
+				}
+				return { allocation, heatWind: heatWindById.get(allocation.Id) ?? null };
+			}),
+			...missing,
 		];
 	});
 
 	// Ranks in separate preliminary heats are heat-local, not event-wide.
-	const eventWideRanks = finals.length > 0 || rounds.every((round) => Boolean(round.TotalResults?.length) || round.Heats.length <= 1);
+	const eventWideRanks = !incompleteSummary && (finals.length > 0 || rounds.every((round) => Boolean(round.TotalResults?.length) || round.Heats.length <= 1));
 	return { entries, eventWideRanks };
 }
 
@@ -248,7 +272,7 @@ export function scoreEvent(event: EventDetail): ScoredResult[] {
 	const scored: InternalScoredResult[] = entries.map((entry) => {
 		const a = entry.allocation;
 		const parsedValue = parseResult(a.Result, event.Name, event.EventCategory);
-		const isValid = !a.NotInCompetition && parsedValue !== null && parsedValue !== -1 && parsedValue !== 0;
+		const isValid = isScoringResult(a, parsedValue);
 
 		return {
 			athleteName: a.Name,
@@ -426,12 +450,4 @@ export function computeChampionship(events: EventDetail[]): { frihetspriset: Tro
 		frihetspriset: finishTrophy('frihetspriset', frihetClubs, frihetEvents),
 		ungdomspokalen: finishTrophy('ungdomspokalen', youthClubs, youthEvents),
 	};
-}
-
-export function computeFrihetspriset(events: EventDetail[]): TrophyResult {
-	return computeChampionship(events).frihetspriset;
-}
-
-export function computeUngdomspokalen(events: EventDetail[]): TrophyResult {
-	return computeChampionship(events).ungdomspokalen;
 }

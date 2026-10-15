@@ -25,7 +25,7 @@ The scoring engine in [`src/lib/scoring.ts`](src/lib/scoring.ts) is independent 
 
 The implementation also handles:
 
-- **Round selection.** The final is scored. Without a final, only the latest round with results is scored, as a provisional placing. Heat rows missing from the combined result list are added.
+- **Round selection.** The final is scored once it records an outcome. Until then, only the latest round with results is scored, as a provisional placing; empty finals and start lists do not hide completed heats. Heat rows missing from the combined result list are added, with the merged event ranked by marks instead of potentially stale ranks.
 - **Non-results and marks.** DNS/DQ-style non-results are handled. Malformed marks (negative, exponent or hexadecimal values, or out-of-range time components) are never scored.
 - **Event names.** Finnish and Swedish event names and mixed junior relay group names are recognised.
 - **Ranking.** Tuloslista's official `ResultRank` is used over re-sorting rounded marks, but only when every valid result in the event has one; otherwise the whole event is ranked by marks.
@@ -55,9 +55,11 @@ The homepage keeps known machine-readable SFIM IDs visible even after Tuloslista
 
 Each complete, validated refresh replaces a snapshot in browser storage, so the last calculated state can be reopened if an old feed later disappears. A restored snapshot shows when it was saved.
 
-A refresh that drops previously loaded events is rejected until the next refresh confirms the change. An empty refresh never replaces loaded results.
+A refresh that drops previously loaded events or clears an event's recorded results is rejected until the next refresh confirms the change. An empty catalog or a refresh that loses every recorded result never replaces loaded results. Non-results such as DNS and DQ count as recorded outcomes, so legitimate corrections remain possible. Payloads without valid allocation IDs are rejected before scoring or saving.
 
 The `/api` proxy only passes through JSON, times out after 10 seconds, and lets the CDN cache successful responses for 10 seconds so viewers share upstream requests.
+
+The competition page includes a plain-language scoring guide in Swedish, Finnish, and English. It shows placing points, explains result bonuses, and runs three illustrative examples through the same scorer as the standings. An expandable section describes the current treatment of rounds, ties, wind, refresh failures, official totals, and the classification-table uncertainty. The guide remains accessible even when results fail to load.
 
 The event list is searchable by event, participant, or club, and distinguishes senior and junior events. Mobile views show the two trophy calculations on each result row without horizontal table scrolling.
 

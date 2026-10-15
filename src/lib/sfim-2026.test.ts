@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { computeFrihetspriset, computeUngdomspokalen, scoreEvent } from './scoring.js';
+import { scoreEvent, computeChampionship } from './scoring.js';
 import { calculated2026Split, official2026Rows, official2026Split, reconcileOfficial2026 } from './official-standings.js';
 import { getResults } from './api.js';
-import type { EventDetail } from './types.js';
+import type { EventDetail, TrophyResult } from './types.js';
 import snapshot from './sfim-2026.fixture.json';
 
 // Captured from Tuloslista competition 19929 after the 2026 championship.
@@ -55,7 +55,7 @@ const ungdomspokalen: Record<string, number> = {
 	'IF Kraft': 15,
 };
 
-function totals(trophy: ReturnType<typeof computeFrihetspriset>): Record<string, number> {
+function totals(trophy: TrophyResult): Record<string, number> {
 	return Object.fromEntries(trophy.rankings.map((club) => [club.club.Name, club.totalPoints]));
 }
 
@@ -67,22 +67,22 @@ describe('2026 organizer score-sheet reconciliation', () => {
 	});
 
 	it('matches every published Frihetspriset total', () => {
-		const actual = totals(reconcileOfficial2026(computeFrihetspriset(events)));
+		const actual = totals(reconcileOfficial2026(computeChampionship(events).frihetspriset));
 		for (const [club, expected] of Object.entries(frihetspriset)) {
 			expect(actual[club], club).toBe(expected);
 		}
 	});
 
 	it('matches every published Ungdomspokalen total', () => {
-		const actual = totals(reconcileOfficial2026(computeUngdomspokalen(events)));
+		const actual = totals(reconcileOfficial2026(computeChampionship(events).ungdomspokalen));
 		for (const [club, expected] of Object.entries(ungdomspokalen)) {
 			expect(actual[club], club).toBe(expected);
 		}
 	});
 
 	it('shows the unallocated difference instead of altering athlete-level scores', () => {
-		for (const calculate of [computeFrihetspriset, computeUngdomspokalen]) {
-			const calculated = calculate(events);
+		const championship = computeChampionship(events);
+		for (const calculated of [championship.frihetspriset, championship.ungdomspokalen]) {
 			const published = reconcileOfficial2026(calculated);
 			for (const club of published.rankings) {
 				const ledgerTotal = club.events.reduce((sum, entry) => sum + entry.points, 0);
@@ -94,8 +94,9 @@ describe('2026 organizer score-sheet reconciliation', () => {
 
 	it('reconciles the published day and age-class subtotals without losing points', () => {
 		const eventDates = new Map(events.map((event) => [event.Id, event.BeginDateTimeWithTZ]));
-		for (const calculate of [computeFrihetspriset, computeUngdomspokalen]) {
-			const published = reconcileOfficial2026(calculate(events));
+		const championship = computeChampionship(events);
+		for (const trophy of [championship.frihetspriset, championship.ungdomspokalen]) {
+			const published = reconcileOfficial2026(trophy);
 			for (const club of published.rankings) {
 				const official = official2026Split(published.trophy, club.club.Name);
 				expect(official, club.club.Name).toBeDefined();

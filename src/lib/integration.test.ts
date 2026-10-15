@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeFrihetspriset, computeUngdomspokalen, scoreEvent } from './scoring.js';
+import { scoreEvent, computeChampionship } from './scoring.js';
 import type { EventDetail, Organization } from './types.js';
 
 function makeOrg(id: number, name: string, short: string): Organization {
@@ -81,7 +81,7 @@ describe('Frihetspriset integration', () => {
 			}),
 		];
 
-		const result = computeFrihetspriset(events);
+		const result = computeChampionship(events).frihetspriset;
 		expect(result.trophy).toBe('frihetspriset');
 
 		const club1 = result.rankings.find((c) => c.club.Name === 'Club 1')!;
@@ -102,7 +102,7 @@ describe('Frihetspriset integration', () => {
 
 	it('produces structured output matching the expected format', () => {
 		const events: EventDetail[] = [];
-		const result = computeFrihetspriset(events);
+		const result = computeChampionship(events).frihetspriset;
 
 		expect(result).toHaveProperty('trophy', 'frihetspriset');
 		expect(result).toHaveProperty('rankings');
@@ -129,7 +129,7 @@ describe('Frihetspriset integration', () => {
 			}),
 		];
 
-		const result = computeFrihetspriset(events);
+		const result = computeChampionship(events).frihetspriset;
 		const club1 = result.rankings.find((c) => c.club.Name === 'Club 1')!;
 		const club2 = result.rankings.find((c) => c.club.Name === 'Club 2')!;
 
@@ -161,7 +161,7 @@ describe('Frihetspriset integration', () => {
 
 describe('Frihetspriset event eligibility', () => {
 	it('does not count combined events', () => {
-		const result = computeFrihetspriset([
+		const result = computeChampionship([
 			makeEvent({
 				name: 'M 10-ottelu',
 				category: 'Field',
@@ -174,7 +174,7 @@ describe('Frihetspriset event eligibility', () => {
 				group: 'M',
 				results: [{ orgId: 1, orgName: 'Club 1', result: '10.95' }],
 			}),
-		]);
+		]).frihetspriset;
 
 		const club = result.rankings.find((entry) => entry.club.Name === 'Club 1')!;
 		expect(club.totalPoints).toBe(12);
@@ -202,14 +202,14 @@ describe('Ungdomspokalen integration', () => {
 			}),
 		];
 
-		const result = computeUngdomspokalen(events);
+		const result = computeChampionship(events).ungdomspokalen;
 		const clubNames = result.rankings.map((c) => c.club.Name);
 		expect(clubNames).toEqual(['Club 2', 'Club 3']);
 	});
 
 	it('produces structured output matching the expected format', () => {
 		const events: EventDetail[] = [];
-		const result = computeUngdomspokalen(events);
+		const result = computeChampionship(events).ungdomspokalen;
 
 		expect(result).toHaveProperty('trophy', 'ungdomspokalen');
 		expect(result).toHaveProperty('rankings');

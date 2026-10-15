@@ -27,6 +27,7 @@ function isAttempt(value: unknown): boolean {
 
 function isAllocation(value: unknown): boolean {
 	return isRecord(value) &&
+		isFiniteNumber(value.Id) && Number.isSafeInteger(value.Id) && value.Id >= 0 &&
 		isString(value.Name) &&
 		isOrganization(value.Organization) &&
 		isOptional(value.Result, isString) &&

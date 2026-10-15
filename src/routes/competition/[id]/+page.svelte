@@ -1,15 +1,17 @@
 <script lang="ts">
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { page } from '$app/stores';
-	import { getEvents, getResults, getCompetitionDetails } from '$lib/api.js';
-	import { getCachedResults, saveResultsSnapshot } from '$lib/result-storage.js';
+	import { getEvents, getCompetitionDetails } from '$lib/api.js';
+	import { getCachedResults } from '$lib/result-storage.js';
+	import { createResultsRefresher } from '$lib/result-refresh.js';
 	import { getPinnedArchive } from '$lib/archives.js';
-	import { createRefreshGuard, RefreshRejectedError } from '$lib/refresh-guard.js';
+	import { RefreshRejectedError } from '$lib/refresh-guard.js';
 	import { computeChampionship } from '$lib/scoring.js';
 	import { reconcileOfficial2026, SFIM_2026_OFFICIAL_SOURCES } from '$lib/official-standings.js';
 	import { getTuloslistaPublicUrl, SFIM_RESULTS_SERVICE_URL, SFIM_SOURCES } from '$lib/sfim-sources.js';
 	import type { EventDetail } from '$lib/types.js';
 	import Standings from '$lib/components/Standings.svelte';
+	import ScoringGuide from '$lib/components/ScoringGuide.svelte';
 	import EventList from '$lib/components/EventList.svelte';
 	import ClubDialog from '$lib/components/ClubDialog.svelte';
 	import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
@@ -41,17 +43,10 @@
 		refetchIntervalInBackground: false
 	}));
 	const queryClient = useQueryClient();
-	const checkRefresh = createRefreshGuard();
+	const refreshResults = createResultsRefresher((id) => queryClient.getQueryData<EventDetail[]>(['comp-results', id]));
 	let resultsQuery = createQuery(() => ({
-		queryKey: ['comp-results', compId],
-		queryFn: async () => {
-			const results = await getResults(compId);
-			if (!isArchivedEventFeed) {
-				checkRefresh(queryClient.getQueryData<EventDetail[]>(['comp-results', compId]), results);
-				saveResultsSnapshot(compId, results);
-			}
-			return results;
-		},
+		queryKey: ['comp-results', compId] as const,
+		queryFn: ({ queryKey: [, id] }) => refreshResults(id),
 		// A restored snapshot keeps its original save time, so "last fetched" stays honest.
 		initialData: () => isArchivedEventFeed ? undefined : getCachedResults(compId)?.events,
 		initialDataUpdatedAt: () => isArchivedEventFeed ? undefined : getCachedResults(compId)?.savedAt,
@@ -177,19 +172,17 @@
 				<EventList events={eventsWithMeta} frihetBreakdown={championship?.frihetspriset.eventBreakdown ?? []} youthBreakdown={championship?.ungdomspokalen.eventBreakdown ?? []} onclub={openClubById} />
 			</section>
 
-			<section id="sa-raknas-poangen" class="scroll-mt-6">
-				<div class="sw-section"><h2>{copy.howScored}</h2><p>{copy.methodSources.replace(/^\d+ \/ /, '')}</p></div>
-				<div class="mt-6 grid gap-x-6 gap-y-6 md:grid-cols-2">
-					<div class="border-t border-black pt-3"><h3 class="m-0 text-[22px] font-extrabold tracking-[-.03em]">Frihetspriset</h3><p class="mt-2 max-w-xl leading-6">{copy.frihetRule}</p></div>
-					<div class="border-t border-black pt-3"><h3 class="m-0 text-[22px] font-extrabold tracking-[-.03em]">Ungdomspokalen</h3><p class="mt-2 max-w-xl leading-6">{copy.youthRule}</p></div>
-				</div>
-				<div class="mt-8 flex flex-wrap gap-x-6 gap-y-2">
-					<a class="sw-link inline-flex items-center gap-1" href={getTuloslistaPublicUrl(compId)} target="_blank" rel="noreferrer">{copy.originalResults} <ArrowUpRight class="h-4 w-4" /></a>
-					<a class="sw-link inline-flex items-center gap-1" href={source?.sourceUrl ?? SFIM_RESULTS_SERVICE_URL} target="_blank" rel="noreferrer">{source?.year === 2025 ? copy.sfiReport2025 : copy.resultsService} <ArrowUpRight class="h-4 w-4" /></a>
-					<a class="sw-link inline-flex items-center gap-1" href="https://sfi.idrott.fi/app/uploads/sites/26/2026/01/2026-tavlingsregler-for-sfi-masterskap-i-friidrott-1-1.pdf" target="_blank" rel="noreferrer">{copy.rules2026} <ArrowUpRight class="h-4 w-4" /></a>
-				</div>
-			</section>
 		{/if}
+
+		<section id="sa-raknas-poangen" class="scroll-mt-6">
+			<div class="sw-section"><h2>{copy.howScored}</h2><p>{copy.methodSources.replace(/^\d+ \/ /, '')}</p></div>
+			<ScoringGuide />
+			<div class="mt-8 flex flex-wrap gap-x-6 gap-y-2">
+				<a class="sw-link inline-flex items-center gap-1" href={getTuloslistaPublicUrl(compId)} target="_blank" rel="noreferrer">{copy.originalResults} <ArrowUpRight class="h-4 w-4" /></a>
+				<a class="sw-link inline-flex items-center gap-1" href={source?.sourceUrl ?? SFIM_RESULTS_SERVICE_URL} target="_blank" rel="noreferrer">{source?.year === 2025 ? copy.sfiReport2025 : copy.resultsService} <ArrowUpRight class="h-4 w-4" /></a>
+				<a class="sw-link inline-flex items-center gap-1" href="https://sfi.idrott.fi/app/uploads/sites/26/2026/01/2026-tavlingsregler-for-sfi-masterskap-i-friidrott-1-1.pdf" target="_blank" rel="noreferrer">{copy.rules2026} <ArrowUpRight class="h-4 w-4" /></a>
+			</div>
+		</section>
 	</main>
 
 	<footer class="sw-wrap flex flex-wrap justify-between gap-4 border-t border-black py-6 text-[var(--mute)]"><span>{copy.brand}</span><span>{copy.footer}</span></footer>

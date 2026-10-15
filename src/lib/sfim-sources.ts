@@ -291,10 +291,6 @@ export const SFIM_SOURCES: readonly SfimSource[] = [
 	}
 ];
 
-export function getSfimSource(year: number): SfimSource | undefined {
-	return SFIM_SOURCES.find((source) => source.year === year);
-}
-
 export function getSfimCounterSources(): SfimSource[] {
 	return SFIM_SOURCES.filter((source) => source.competitionId !== undefined);
 }

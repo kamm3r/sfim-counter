@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scoreEvent, computeFrihetspriset, computeUngdomspokalen, clubPositions } from './scoring.js';
+import { scoreEvent, clubPositions, computeChampionship } from './scoring.js';
 import type { EventDetail, Organization } from './types.js';
 
 function makeOrg(id: number, name: string, short: string): Organization {
@@ -374,7 +374,7 @@ describe('scoreEvent — junior events (group P15/H17)', () => {
 	});
 });
 
-describe('computeFrihetspriset', () => {
+describe('computeChampionship — Frihetspriset', () => {
 	it('aggregates points across all events (both senior and junior)', () => {
 		const events = [
 			makeEvent({
@@ -391,7 +391,7 @@ describe('computeFrihetspriset', () => {
 			}),
 		];
 
-		const result = computeFrihetspriset(events);
+		const result = computeChampionship(events).frihetspriset;
 		const clubA = result.rankings.find((c) => c.club.Name === 'Club A')!;
 		expect(clubA.events).toHaveLength(2);
 		expect(clubA.totalPoints).toBeGreaterThan(0);
@@ -416,25 +416,25 @@ describe('computeFrihetspriset', () => {
 			}),
 		];
 
-		const result = computeFrihetspriset(events);
+		const result = computeChampionship(events).frihetspriset;
 		expect(result.rankings.filter((c) => c.totalPoints > 0)).toHaveLength(6);
 	});
 
 	it('returns empty for no events', () => {
-		const result = computeFrihetspriset([]);
+		const result = computeChampionship([]).frihetspriset;
 		expect(result.rankings).toHaveLength(0);
 		expect(result.trophy).toBe('frihetspriset');
 	});
 });
 
-describe('computeUngdomspokalen', () => {
+describe('computeChampionship — Ungdomspokalen', () => {
 	it('keeps A-class points for strong junior results', () => {
 		const event = makeEvent({
 			name: '100m', category: 'Track', group: 'M15',
 			results: [{ orgId: 1, orgName: 'Club A', result: '11.88' }],
 		});
 
-		const result = computeUngdomspokalen([event]);
+		const result = computeChampionship([event]).ungdomspokalen;
 		expect(result.rankings[0].totalPoints).toBe(12);
 	});
 
@@ -448,7 +448,7 @@ describe('computeUngdomspokalen', () => {
 			],
 		});
 
-		const result = computeUngdomspokalen([event]);
+		const result = computeChampionship([event]).ungdomspokalen;
 		expect(result.rankings.find((club) => club.club.Name === 'Club B')?.totalPoints).toBe(4.5);
 		expect(result.rankings.find((club) => club.club.Name === 'Club C')?.totalPoints).toBe(4.5);
 	});
@@ -465,7 +465,7 @@ describe('computeUngdomspokalen', () => {
 			}),
 		];
 
-		const result = computeUngdomspokalen(events);
+		const result = computeChampionship(events).ungdomspokalen;
 		expect(result.rankings).toHaveLength(1);
 		expect(result.rankings[0].club.Name).toBe('Club B');
 	});
@@ -481,7 +481,7 @@ describe('computeUngdomspokalen', () => {
 			],
 		});
 
-		const result = computeUngdomspokalen([event]);
+		const result = computeChampionship([event]).ungdomspokalen;
 		const a = result.rankings.find((c) => c.club.Name === 'Club A')!;
 		expect(a.totalPoints).toBeGreaterThan(0);
 	});
@@ -494,7 +494,7 @@ describe('computeUngdomspokalen', () => {
 			],
 		});
 
-		const result = computeUngdomspokalen([event]);
+		const result = computeChampionship([event]).ungdomspokalen;
 		const a = result.rankings.find((c) => c.club.Name === 'Club A')!;
 		expect(a.totalPoints).toBe(12);
 	});
@@ -657,6 +657,65 @@ describe('scoreEvent — feed edge cases', () => {
 });
 
 describe('scoreEvent — incomplete feeds', () => {
+	it.each(['DNS', null])('keeps official ranks when only a %s row is missing from the summary', (result) => {
+		const event = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [
+			{ orgId: 1, orgName: 'Club A', result: '10.50' },
+			{ orgId: 2, orgName: 'Club B', result: '10.50' },
+			{ orgId: 3, orgName: 'Club C', result },
+		] });
+		const [a, b, c] = event.Rounds[0].Heats[0].Allocations;
+		a.Id = 1;
+		b.Id = 2;
+		c.Id = 3;
+		event.Rounds[0].TotalResults = [{ ...a, ResultRank: 1 }, { ...b, ResultRank: 2 }];
+		expect(scoreEvent(event).slice(0, 2).map((r) => [r.placement, r.placementPoints]))
+			.toEqual([[1, 7], [2, 5]]);
+	});
+
+	it.each([null, '  '])('uses a recorded heat result when the same summary row is %s', (result) => {
+		const event = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [
+			{ orgId: 1, orgName: 'Club A', result: '10.80' },
+			{ orgId: 2, orgName: 'Club B', result: '10.60' },
+		] });
+		const [a, b] = event.Rounds[0].Heats[0].Allocations;
+		a.Id = 1;
+		b.Id = 2;
+		event.Rounds[0].TotalResults = [{ ...a, ResultRank: 1 }, { ...b, Result: result }];
+		expect(scoreEvent(event).map((r) => [r.result, r.placement, r.placementPoints]))
+			.toEqual([['10.80', 2, 5], ['10.60', 1, 7]]);
+	});
+
+	it.each([null, '  '])('keeps completed heats when the scheduled final only has %s marks', (result) => {
+		const event = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [
+			{ orgId: 1, orgName: 'Club A', result: '10.80' },
+		] });
+		const qualifying = { ...event.Rounds[0], Name: 'Qualification', RoundTypeCategory: 'Qualify' };
+		const final = makeEvent({ name: '100 m', category: 'Track', results: [
+			{ orgId: 1, orgName: 'Club A', result },
+		] }).Rounds[0];
+		event.Rounds = [qualifying, final];
+		expect(scoreEvent(event)).toMatchObject([{ result: '10.80', placement: 1, placementPoints: 7 }]);
+		final.Heats = [];
+		expect(scoreEvent(event)).toMatchObject([{ result: '10.80', placement: 1 }]);
+		final.Heats = [{ Allocations: [{ ...qualifying.Heats[0].Allocations[0], Result: '10.90' }] }];
+		expect(scoreEvent(event)).toMatchObject([{ result: '10.90', placement: 1 }]);
+	});
+
+	it('ignores stale summary ranks when adding ranked heat rows', () => {
+		const event = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [
+			{ orgId: 1, orgName: 'Club A', result: '10.80' },
+			{ orgId: 2, orgName: 'Club B', result: '10.60' },
+		] });
+		const [a, b] = event.Rounds[0].Heats[0].Allocations;
+		a.Id = 1;
+		b.Id = 2;
+		a.ResultRank = 2;
+		b.ResultRank = 1;
+		event.Rounds[0].TotalResults = [{ ...a, ResultRank: 1 }];
+		expect(scoreEvent(event).map((r) => [r.club.Name, r.placement, r.placementPoints]))
+			.toEqual([['Club A', 2, 5], ['Club B', 1, 7]]);
+	});
+
 	it('adds heat rows that the combined result list is missing', () => {
 		const event = makeEvent({ name: '100 m', category: 'Track', group: 'M', results: [
 			{ orgId: 1, orgName: 'Club A', result: '10.80' },
@@ -678,7 +737,7 @@ describe('computeChampionship — club identity', () => {
 			{ orgId: 0, orgName: 'Club A', result: '12.00' },
 			{ orgId: 0, orgName: 'Club B', result: '12.10' },
 		] });
-		const rankings = computeFrihetspriset([event]).rankings;
+		const rankings = computeChampionship([event]).frihetspriset.rankings;
 		expect(rankings.map((club) => [club.club.Name, club.totalPoints])).toEqual([['Club A', 7], ['Club B', 5]]);
 	});
 });
