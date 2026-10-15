@@ -29,7 +29,7 @@ export function initializeLocale(): void {
 const sv = {
 	language: 'Språk', brand: 'SFIM / POÄNG', scoreAndResults: 'SFIM / Poäng & resultat',
 	championship: 'SFIM i friidrott {year}', competition: 'Tävling {id}', federation: 'Svenska Finlands Idrottsförbund', archiveDate: 'Datum enligt arkivkällan',
-	archiveNav: 'Årsarkiv ↓', heroKicker: 'Svenskfinländsk friidrott / På plats i poängkampen', heroLine1: 'Varje resultat.', heroLine2: 'Varje poäng.',
+	archiveNav: 'Årsarkiv ↓', heroLine1: 'Vem leder?', heroLine2: 'Kolla poängen.',
 	heroIntro: 'Följ Frihetspriset och Ungdomspokalen gren för gren. Se föreningskampen medan tävlingen pågår och öppna resultatprotokollen även efteråt.',
 	fromTrack: 'Från bana till tabell', scoringFormula: 'Placering + resultatklass = föreningens poäng.',
 	heroNote: 'Beräknade livepoäng märks som preliminära. Officiella sluttabeller visas när de finns.',
@@ -56,10 +56,10 @@ const sv = {
 	frihetRule: 'Senior: placering 7 / 5 / 4 / 3 / 2 / 1. Resultatklass SM +15, M +10 eller A +5 oavsett placering. Junior: placering 3 / 2 / 1 och A-klass +3 för de tre främsta.',
 	youthRule: 'Endast juniorgrenar. Placering 7 / 5 / 4 / 3 / 2 / 1; A-klass ger +5 oavsett placering. Vid delad placering delas placeringspoängen.',
 	originalResults: 'Tuloslista originalresultat', sfiReport2025: 'SFI:s rapport 2025', resultsService: 'SFIM resultatservice', rules2026: 'Tävlingsregler 2026',
-	seniorJunior: 'Seniorer + juniorer', juniorClasses: 'Juniorklasserna', officialTable: 'Officiell tabell', leader: 'Ledare',
+	seniorJunior: 'Seniorer + juniorer', juniorClasses: 'Juniorklasserna', officialTable: 'Officiell tabell', leader: 'Ledare', leadMargin: 'Före tvåan', behindLeader: 'Efter ledaren', winner: 'Vinnare', place: 'Plats', tiedPlace: 'delad plats', aheadOf: '+{points} före {club}', biggestPoints: 'Största poängen', showAllClubResults: 'Visa alla {count}', showFewer: 'Visa färre', pickClub: 'Välj en förening i tavlan · detaljerna visas bredvid', allDays: 'Alla dagar', allClasses: 'Alla klasser', eventsShown: '{shown} av {total} grenar', showAllResults: 'Alla {count} resultat', hideResults: 'Dölj resultat', noPointsInTrophy: 'Inga poäng i den här pokalen.', calculatedNote: 'Grenpoängen är beräknade från resultaten.', eventWinners: 'Grensegrare', topTen: 'Topp 10', allClubs: 'Alla föreningar', pointsLegend: 'Poäng',
 	showScoringResults: 'Visa alla poänggivande resultat', points: 'poäng', showFullTable: 'Visa hela tabellen · {count} föreningar', noPoints: 'Inga poäng registrerade ännu.',
 	searchPlaceholder: 'Sök gren, deltagare eller förening', filterClass: 'Filtrera klass', all: 'Alla', senior: 'Senior', junior: 'Junior',
-	eventCount: '{shown} av {total} grenar · klicka för resultat och poäng per deltagare', resultCount: 'resultat',
+	eventCount: '{shown} av {total} grenar · klicka för resultat och poäng per deltagare', resultCount: 'resultat', eventsInDay: '{count} grenar',
 	class: 'Klass', placementShort: 'plac.', classShort: 'klass', athleteClub: 'Deltagare / förening', result: 'Resultat',
 	noSearchResults: 'Ingen gren eller deltagare matchar sökningen.',
 	closeProtocol: 'Stäng poängprotokoll', clubProtocol: 'Poängprotokoll / förening', countedResults: '{count} poänggivande resultat',
@@ -75,7 +75,7 @@ type Copy = { [K in keyof typeof sv]: string };
 const fi: Copy = {
 	language: 'Kieli', brand: 'SFIM / PISTEET', scoreAndResults: 'SFIM / Pisteet ja tulokset',
 	championship: 'SFIM yleisurheilu {year}', competition: 'Kilpailu {id}', federation: 'Suomenruotsalainen urheiluliitto', archiveDate: 'Päivämäärä arkistolähteen mukaan',
-	archiveNav: 'Vuosittainen arkisto ↓', heroKicker: 'Suomenruotsalainen yleisurheilu / Seuraa pistekilpailua', heroLine1: 'Jokainen tulos.', heroLine2: 'Jokainen piste.',
+	archiveNav: 'Vuosittainen arkisto ↓', heroLine1: 'Kuka johtaa?', heroLine2: 'Katso pisteet.',
 	heroIntro: 'Seuraa Frihetspriset- ja Ungdomspokalen-pistekilpailuja laji lajilta. Näe seurojen tilanne kilpailun aikana ja palaa tuloksiin myöhemmin.',
 	fromTrack: 'Kentältä pistetaulukkoon', scoringFormula: 'Sijoitus + tulosluokka = seuran pisteet.',
 	heroNote: 'Lasketut live-pisteet merkitään alustaviksi. Viralliset lopputaulukot näytetään, kun ne ovat saatavilla.',
@@ -102,10 +102,10 @@ const fi: Copy = {
 	frihetRule: 'Aikuiset: sijoituspisteet 7 / 5 / 4 / 3 / 2 / 1. Tulosluokasta SM +15, M +10 tai A +5 sijoituksesta riippumatta. Nuoret: sijoituspisteet 3 / 2 / 1 ja A-luokasta +3 kolmelle parhaalle.',
 	youthRule: 'Vain nuorten lajit. Sijoituspisteet 7 / 5 / 4 / 3 / 2 / 1; A-luokasta +5 sijoituksesta riippumatta. Jaetussa sijoituksessa sijoituspisteet jaetaan.',
 	originalResults: 'Alkuperäiset tulokset Tuloslistassa', sfiReport2025: 'SFI:n raportti 2025', resultsService: 'SFIM-tulospalvelu', rules2026: 'Kilpailusäännöt 2026',
-	seniorJunior: 'Aikuiset + nuoret', juniorClasses: 'Nuorten sarjat', officialTable: 'Virallinen taulukko', leader: 'Johdossa',
+	seniorJunior: 'Aikuiset + nuoret', juniorClasses: 'Nuorten sarjat', officialTable: 'Virallinen taulukko', leader: 'Johdossa', leadMargin: 'Ero kakkoseen', behindLeader: 'Ero johtajaan', winner: 'Voittaja', place: 'Sija', tiedPlace: 'jaettu sija', aheadOf: '+{points} ennen seuraa {club}', biggestPoints: 'Suurimmat pisteet', showAllClubResults: 'Näytä kaikki {count}', showFewer: 'Näytä vähemmän', pickClub: 'Valitse seura taulusta · tiedot näkyvät vieressä', allDays: 'Kaikki päivät', allClasses: 'Kaikki sarjat', eventsShown: '{shown}/{total} lajia', showAllResults: 'Kaikki {count} tulosta', hideResults: 'Piilota tulokset', noPointsInTrophy: 'Ei pisteitä tässä kilpailussa.', calculatedNote: 'Lajipisteet on laskettu tuloksista.', eventWinners: 'Lajivoittajat', topTen: 'Top 10', allClubs: 'Kaikki seurat', pointsLegend: 'Pisteet',
 	showScoringResults: 'Näytä kaikki pisteitä tuoneet tulokset', points: 'pistettä', showFullTable: 'Näytä koko taulukko · {count} seuraa', noPoints: 'Pisteitä ei ole vielä kirjattu.',
 	searchPlaceholder: 'Hae lajia, urheilijaa tai seuraa', filterClass: 'Suodata sarja', all: 'Kaikki', senior: 'Aikuiset', junior: 'Nuoret',
-	eventCount: '{shown}/{total} lajia · avaa laji nähdäksesi tulokset ja urheilijakohtaiset pisteet', resultCount: 'tulosta',
+	eventCount: '{shown}/{total} lajia · avaa laji nähdäksesi tulokset ja urheilijakohtaiset pisteet', resultCount: 'tulosta', eventsInDay: '{count} lajia',
 	class: 'Luokka', placementShort: 'sij.', classShort: 'luokka', athleteClub: 'Urheilija / seura', result: 'Tulos',
 	noSearchResults: 'Hakuun sopivaa lajia tai urheilijaa ei löytynyt.',
 	closeProtocol: 'Sulje piste-erittely', clubProtocol: 'Piste-erittely / seura', countedResults: '{count} pisteitä tuonutta tulosta',
@@ -119,7 +119,7 @@ const fi: Copy = {
 const en: Copy = {
 	language: 'Language', brand: 'SFIM / POINTS', scoreAndResults: 'SFIM / Points & results',
 	championship: 'SFIM athletics {year}', competition: 'Competition {id}', federation: 'Finland-Swedish Sports Federation', archiveDate: 'Date from archive source',
-	archiveNav: 'Year archive ↓', heroKicker: 'Finland-Swedish athletics / Follow the club contest', heroLine1: 'Every result.', heroLine2: 'Every point.',
+	archiveNav: 'Year archive ↓', heroLine1: 'Who’s leading?', heroLine2: 'Check the points.',
 	heroIntro: 'Follow Frihetspriset and Ungdomspokalen event by event. Watch the club standings as competition unfolds and revisit the results afterwards.',
 	fromTrack: 'From track to table', scoringFormula: 'Placing + performance class = club points.',
 	heroNote: 'Calculated live points are marked provisional. Official final tables are shown when available.',
@@ -146,10 +146,10 @@ const en: Copy = {
 	frihetRule: 'Seniors: placing points 7 / 5 / 4 / 3 / 2 / 1. Performance class SM +15, M +10, or A +5 regardless of placing. Juniors: placing points 3 / 2 / 1 and A-class +3 for the top three.',
 	youthRule: 'Junior events only. Placing points 7 / 5 / 4 / 3 / 2 / 1; A-class adds 5 regardless of placing. Placing points are shared for ties.',
 	originalResults: 'Original results at Tuloslista', sfiReport2025: 'SFI 2025 report', resultsService: 'SFIM results service', rules2026: '2026 competition rules',
-	seniorJunior: 'Seniors + juniors', juniorClasses: 'Junior classes', officialTable: 'Official table', leader: 'Leader',
+	seniorJunior: 'Seniors + juniors', juniorClasses: 'Junior classes', officialTable: 'Official table', leader: 'Leader', leadMargin: 'Ahead of 2nd', behindLeader: 'Behind the leader', winner: 'Winner', place: 'Place', tiedPlace: 'tied place', aheadOf: '+{points} ahead of {club}', biggestPoints: 'Biggest scores', showAllClubResults: 'Show all {count}', showFewer: 'Show fewer', pickClub: 'Pick a club on the board · details appear alongside', allDays: 'All days', allClasses: 'All classes', eventsShown: '{shown} of {total} events', showAllResults: 'All {count} results', hideResults: 'Hide results', noPointsInTrophy: 'No points in this trophy.', calculatedNote: 'Event points are calculated from the results.', eventWinners: 'Event winners', topTen: 'Top 10', allClubs: 'All clubs', pointsLegend: 'Points',
 	showScoringResults: 'Show all point-scoring results', points: 'points', showFullTable: 'Show full table · {count} clubs', noPoints: 'No points recorded yet.',
 	searchPlaceholder: 'Search event, athlete, or club', filterClass: 'Filter class', all: 'All', senior: 'Senior', junior: 'Junior',
-	eventCount: '{shown} of {total} events · open one for athlete results and points', resultCount: 'results',
+	eventCount: '{shown} of {total} events · open one for athlete results and points', resultCount: 'results', eventsInDay: '{count} events',
 	class: 'Class', placementShort: 'place', classShort: 'class', athleteClub: 'Athlete / club', result: 'Result',
 	noSearchResults: 'No event or athlete matches your search.',
 	closeProtocol: 'Close points breakdown', clubProtocol: 'Points breakdown / club', countedResults: '{count} point-scoring results',
@@ -177,6 +177,14 @@ export function formatPoints(value: number, selected: Locale): string {
 
 export function formatDate(value: string | Date, selected: Locale): string {
 	return new Date(value).toLocaleDateString(localeTags[selected], { timeZone: 'Europe/Helsinki' });
+}
+
+export function formatDay(value: string, selected: Locale): string {
+	return new Date(value).toLocaleDateString(localeTags[selected], { weekday: 'long', day: 'numeric', month: 'numeric', timeZone: 'Europe/Helsinki' });
+}
+
+export function formatClock(value: string, selected: Locale): string {
+	return new Date(value).toLocaleTimeString(localeTags[selected], { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Helsinki' });
 }
 
 export function formatTime(timestamp: number, selected: Locale): string {
