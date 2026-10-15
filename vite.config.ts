@@ -11,7 +11,8 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter()
+			// Pinned so the deployed runtime never follows the build machine's Node version.
+			adapter: adapter({ runtime: 'nodejs24.x' })
 		})
 	]
 });

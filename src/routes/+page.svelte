@@ -4,7 +4,6 @@
 	import { getSfimCounterSources, SFIM_SOURCES, type SfimSource } from '$lib/sfim-sources.js';
 	import { archiveLinkLabel, fill, formatDate, getCopy, locale } from '$lib/i18n.js';
 	import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
-	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 
 	type CounterCompetition = { id: number; name: string; organization: string; dateLabel: string; venue: string; year: number; source?: SfimSource };
@@ -30,6 +29,11 @@
 		}
 		return [...competitions.values()].sort((a, b) => b.year - a.year);
 	});
+	let heroAnswer = $derived.by(() => {
+		const answer = copy.heroLine2.toUpperCase();
+		const split = answer.lastIndexOf(' ');
+		return split < 0 ? [answer, ''] : [answer.slice(0, split), answer.slice(split + 1)];
+	});
 	let historicalSources = $derived(SFIM_SOURCES.filter((source) => source.competitionId === undefined));
 </script>
 
@@ -38,50 +42,70 @@
 	<meta name="description" content={copy.heroIntro} />
 </svelte:head>
 
-<div class="app-shell">
-	<header class="bg-[#15354b] text-white">
-		<div class="site-width flex min-h-16 items-center justify-between gap-3 border-b border-white/20 py-3"><a href="/" class="display-font text-xl font-bold tracking-wide">SFIM <span class="font-medium text-[#f2b74c]">/</span> {copy.brand.split(' / ')[1]}</a><div class="flex items-center gap-4"><a href="#arkiv" class="hidden text-xs font-semibold text-[#d8e4e6] hover:text-white sm:inline">{copy.archiveNav}</a><LanguageSwitcher /></div></div>
-		<div class="site-width grid gap-8 pb-12 pt-12 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-end lg:pb-16 lg:pt-16">
-			<div><p class="eyebrow text-[#f2b74c]">{copy.heroKicker}</p><h1 class="display-font mt-4 max-w-4xl text-[4rem] font-bold leading-[.86] tracking-[.005em] sm:text-[6rem] xl:text-[7rem]">{copy.heroLine1}<br /><span class="text-[#f2b74c]">{copy.heroLine2}</span></h1><p class="mt-7 max-w-xl text-base leading-7 text-[#d8e4e6]">{copy.heroIntro}</p></div>
-			<div class="border-t-2 border-[#f2b74c] pt-4 lg:border-l-2 lg:border-t-0 lg:pl-5 lg:pt-0"><p class="eyebrow text-[#a9c5cc]">{copy.fromTrack}</p><p class="display-font mt-2 text-3xl font-semibold leading-tight">{copy.scoringFormula}</p><p class="mt-3 text-sm leading-6 text-[#bbd0d5]">{copy.heroNote}</p></div>
+<div class="min-h-screen bg-white">
+	<header class="sw-wrap bg-[var(--led-bg)] pb-12 pt-5">
+		<nav class="flex items-center justify-between gap-4">
+			<a href="/" class="led text-[18px]">■ {copy.brand}</a>
+			<div class="flex items-center gap-6"><a href="#arkiv" class="hidden text-sm font-medium text-[#8a7a50] transition-colors hover:text-[var(--amber)] sm:inline">{copy.archiveNav}</a><LanguageSwitcher tone="led" /></div>
+		</nav>
+		<div class="mt-16 grid gap-10 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:items-end">
+			<!-- Three fixed rows in every language: question, then the answer broken before its last word.
+			     Sized to the column so the widest row (WHO'S LEADING?, ~8.8em in Doto) always fits on one line. -->
+			<div class="[container-type:inline-size]">
+				<h1 class="led m-0 text-[min(6.6rem,calc(100cqi/9))] leading-[1] [&>span]:block [&>span]:whitespace-nowrap">
+					<span>{copy.heroLine1.toUpperCase()}</span>
+					<span class="led-green">{heroAnswer[0]}</span>
+					<span class="led-green">{heroAnswer[1]}</span>
+				</h1>
+			</div>
+			<div class="border-t-2 border-dashed border-[#3a2a00] pt-5 lg:border-l-2 lg:border-t-0 lg:pl-6 lg:pt-0">
+				<p class="m-0 text-[16px] leading-7 text-[#d8cfb8]">{copy.heroIntro}</p>
+				<p class="led mt-5 text-[18px]">{copy.scoringFormula.toUpperCase()}</p>
+				<p class="mt-2 text-[13px] leading-6 text-[#8a7a50]">{copy.heroNote}</p>
+			</div>
 		</div>
-		<div class="h-2 bg-[#c64f3d]"></div>
 	</header>
+	<div class="h-1.5 bg-[var(--red)]"></div>
 
-	<main class="site-width pb-20">
-		<section class="pt-12" aria-labelledby="available-heading"><div class="mb-5 flex flex-wrap items-end justify-between gap-4"><div><p class="eyebrow text-[#c64f3d]">{copy.openCompetition}</p><h2 id="available-heading" class="section-heading mt-1">{copy.resultsHere}</h2></div><p class="max-w-sm text-sm text-[#607782]">{copy.resultsHereNote}</p></div>
-			{#if compQuery.error}<div class="mb-5 border-l-4 border-[#d69a36] bg-[#fff1cf] px-4 py-3 text-sm">{copy.serviceUnavailable}</div>{/if}
-			{#if sfimComps.length === 0}<div class="border border-[#d9dedb] bg-white p-8 text-sm text-[#607782]">{copy.noCompetitions}</div>{:else}
-				<div class="grid gap-4 md:grid-cols-2">
-					{#each sfimComps as comp}
-						<a href="/competition/{comp.id}" class="group flex min-h-64 flex-col justify-between border border-[#d9dedb] bg-white p-5 transition-colors hover:border-[#27778a] hover:bg-[#eef3f2] sm:p-6">
-							<div class="flex items-start justify-between gap-3"><p class="eyebrow text-[#c64f3d]">{comp.source?.status === 'archive' ? copy.finalArchive : copy.liveProvisional}</p><ArrowUpRight class="h-5 w-5 text-[#27778a] transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" /></div>
-							<div><span class="score-number block text-[4rem] font-bold leading-none text-[#d9dedb]">{comp.year}</span><h3 class="display-font mt-1 text-[2.2rem] font-bold leading-none">{comp.source ? fill(copy.championship, { year: comp.year }) : comp.name}</h3><p class="mt-2 text-sm text-[#607782]">{comp.dateLabel}{comp.venue ? ` · ${comp.venue}` : ''}</p><p class="mt-1 text-xs text-[#607782]">{comp.organization}</p><p class="mt-5 inline-flex items-center gap-2 text-sm font-bold text-[#27778a]">{copy.openResults} <ArrowRight class="h-4 w-4" /></p></div>
+	<main class="sw-wrap pb-24">
+		<section aria-labelledby="available-heading">
+			<div class="sw-section"><h2 id="available-heading">{copy.resultsHere}</h2><p>{copy.resultsHereNote}</p></div>
+			{#if compQuery.error}<p class="sw-note warn">{copy.serviceUnavailable}</p>{/if}
+			{#if sfimComps.length === 0}
+				<p class="mt-6 text-[var(--mute)]">{copy.noCompetitions}</p>
+			{:else}
+				<div class="mt-2">
+					{#each sfimComps as comp, index}
+						<a href="/competition/{comp.id}" class="sw-rise group grid items-end gap-x-8 gap-y-2 border-b border-[var(--rule)] py-6 transition-colors sm:grid-cols-[auto_minmax(0,1fr)_auto]" style:--d="{index * 80}ms">
+							<span class="num text-[clamp(4rem,9vw,7.5rem)] font-black leading-[.8] tracking-[-.06em] transition-colors group-hover:text-[var(--red)]">{comp.year}</span>
+							<span class="min-w-0">
+								<span class="sw-cap block {comp.source?.status === 'archive' ? 'text-[var(--red)]' : 'text-black'}">{comp.source?.status === 'archive' ? copy.finalArchive : `● ${copy.liveProvisional}`}</span>
+								<span class="mt-1 block text-[clamp(1.4rem,2.6vw,2.2rem)] font-extrabold leading-tight tracking-[-.035em]">{comp.source ? fill(copy.championship, { year: comp.year }) : comp.name}</span>
+								<span class="block text-[var(--mute)]">{comp.dateLabel}{comp.venue ? ` · ${comp.venue}` : ''} · {comp.organization}</span>
+							</span>
+							<span class="inline-flex items-center gap-2 font-bold transition-transform group-hover:translate-x-1">{copy.openResults} <ArrowRight class="h-4 w-4" /></span>
 						</a>
 					{/each}
 				</div>
 			{/if}
 		</section>
 
-		<section id="arkiv" class="scroll-mt-6 pt-16" aria-labelledby="archive-heading"><div class="mb-5"><p class="eyebrow text-[#c64f3d]">{copy.yearByYear}</p><h2 id="archive-heading" class="section-heading mt-1">{copy.sourceArchive}</h2><p class="mt-3 max-w-2xl text-sm leading-6 text-[#607782]">{copy.archiveIntro}</p></div>
-			<div class="border border-[#d9dedb] bg-white">
+		<section id="arkiv" class="scroll-mt-6" aria-labelledby="archive-heading">
+			<div class="sw-section"><h2 id="archive-heading">{copy.sourceArchive}</h2><p>{copy.archiveIntro}</p></div>
+			<div class="mt-2">
 				{#each historicalSources as source}
-					<div class="grid gap-2 border-b border-[#e4e8e5] px-4 py-3 last:border-b-0 sm:grid-cols-[6rem_1fr_auto] sm:items-center sm:gap-4 sm:px-6">
-						<span class="score-number text-2xl font-bold">{source.year}</span>
-						<div><p class="text-sm font-semibold">{source.venue ?? (source.status === 'cancelled' ? copy.cancelledChampionship : fill(copy.championship, { year: source.year }))}</p><p class="text-xs text-[#607782]">{source.dates ?? copy.dateMissing} · {source.status === 'cancelled' ? copy.cancelled : source.status === 'archive' ? copy.externalArchive : copy.partiallyPreserved}</p></div>
-						<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-[#27778a]">
-							<a href={source.sourceUrl} target="_blank" rel="noreferrer" class="hover:underline">{copy.source} ↗</a>
-							{#if source.resultsUrl}
-								<a href={source.resultsUrl} target="_blank" rel="noreferrer" class="hover:underline">{source.additionalResults?.some((result) => result.label.startsWith('Dag')) ? `${copy.day} 1 ↗` : `${copy.results} ↗`}</a>
-							{/if}
-							{#each source.additionalResults ?? [] as result}
-								<a href={result.url} target="_blank" rel="noreferrer" class="hover:underline">{archiveLinkLabel(result.label, $locale)} ↗</a>
-							{/each}
+					<div class="grid gap-2 border-b border-[var(--rule)] py-3 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-center sm:gap-6">
+						<span class="num text-2xl font-black tracking-[-.04em]">{source.year}</span>
+						<div class="min-w-0"><p class="m-0 font-semibold">{source.venue ?? (source.status === 'cancelled' ? copy.cancelledChampionship : fill(copy.championship, { year: source.year }))}</p><p class="m-0 text-xs text-[var(--mute)]">{source.dates ?? copy.dateMissing} · {source.status === 'cancelled' ? copy.cancelled : source.status === 'archive' ? copy.externalArchive : copy.partiallyPreserved}</p></div>
+						<div class="flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
+							<a href={source.sourceUrl} target="_blank" rel="noreferrer" class="sw-link">{copy.source} ↗</a>
+							{#if source.resultsUrl}<a href={source.resultsUrl} target="_blank" rel="noreferrer" class="sw-link">{source.additionalResults?.some((result) => result.label.startsWith('Dag')) ? `${copy.day} 1 ↗` : `${copy.results} ↗`}</a>{/if}
+							{#each source.additionalResults ?? [] as result}<a href={result.url} target="_blank" rel="noreferrer" class="sw-link">{archiveLinkLabel(result.label, $locale)} ↗</a>{/each}
 						</div>
 					</div>
 				{/each}
 			</div>
 		</section>
 	</main>
-	<footer class="bg-[#15354b] py-8 text-[#c5d7dc]"><div class="site-width flex flex-wrap items-center justify-between gap-3"><span class="display-font text-xl font-bold text-white">{copy.brand}</span><span class="text-xs">{copy.footer}</span></div></footer>
+	<footer class="sw-wrap flex flex-wrap justify-between gap-4 border-t border-black py-6 text-[var(--mute)]"><span>{copy.brand}</span><span>{copy.footer}</span></footer>
 </div>

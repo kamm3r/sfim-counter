@@ -77,4 +77,14 @@ describe('isCombinedEvent', () => {
 		expect(isCombinedEvent('Women heptathlon')).toBe(true);
 		expect(isCombinedEvent('M 100 m')).toBe(false);
 	});
+
+	it('uses the women\'s senior relay and walk columns', () => {
+		expect(classifyResult('N 4x100m viesti', ms(48.00), true, 'Relay', 'N')).toBe('A');
+		expect(classifyResult('M 4x100m viesti', ms(48.00), false, 'Relay', 'M')).toBe('none');
+		expect(classifyResult('N 3x3000m kävely', ms(49 * 60), true, 'Relay', 'N')).toBe('A');
+		expect(classifyResult('D 5000m gång', ms(23 * 60), true, 'Track', 'D')).toBe('M');
+		expect(classifyResult('D 5000m gång', ms(21 * 60 + 50), true, 'Track', 'D')).toBe('SM');
+		// The SUL table lists the hurdles relay only for youth teams.
+		expect(classifyResult('M 4x100m aidat', ms(60.00), false, 'Relay', 'M')).toBe('none');
+	});
 });

@@ -89,7 +89,16 @@ function officialClubName(name: string): string {
 // calculated ledger and its unallocated difference visible; the organizer did not
 // publish an athlete-by-athlete points sheet from which to assign that difference.
 export function reconcileOfficial2026(calculated: TrophyResult): TrophyResult {
-	const clubs = new Map(calculated.rankings.map((entry) => [officialClubName(entry.club.Name), entry]));
+	// Aliases can map two calculated clubs onto one published name; merge them
+	// rather than letting the later entry overwrite the earlier one.
+	const clubs = new Map<string, ClubScore>();
+	for (const entry of calculated.rankings) {
+		const name = officialClubName(entry.club.Name);
+		const existing = clubs.get(name);
+		clubs.set(name, existing
+			? { ...existing, totalPoints: existing.totalPoints + entry.totalPoints, events: [...existing.events, ...entry.events] }
+			: entry);
+	}
 	const rankings: ClubScore[] = official2026Rows(calculated.trophy).map(([name, publishedPoints]) => {
 		const computed = clubs.get(name);
 		const calculatedPoints = computed?.totalPoints ?? 0;

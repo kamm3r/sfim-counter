@@ -1,4 +1,9 @@
 import type { CompetitionList, CompetitionProperties, Events, EventDetail } from './types.js';
+import { isEventDetail } from './validation.js';
+import { getPinnedArchive } from './archives.js';
+
+// Pinned final feeds stay available after Tuloslista retires the old API records.
+const ARCHIVE_FIXTURES = import.meta.glob<{ default: unknown }>('./sfim-*.fixture.json');
 
 const TULOSLISTA_API_ORIGIN = 'https://cached-public-api.tuloslista.com';
 const TULOSLISTA_API_BASE_URL = `${TULOSLISTA_API_ORIGIN}/live/v1`;
@@ -10,18 +15,6 @@ async function fetchJson<T>(url: string): Promise<T> {
 		throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}`.trim());
 	}
 	return res.json() as Promise<T>;
-}
-
-function isEventDetail(value: unknown, eventId: number): value is EventDetail {
-	if (!value || typeof value !== 'object') return false;
-	const event = value as Partial<EventDetail>;
-	return event.Id === eventId && typeof event.Name === 'string' && typeof event.Group === 'string' &&
-		typeof event.BeginDateTimeWithTZ === 'string' &&
-		(event.EventCategory === 'Track' || event.EventCategory === 'Field' || event.EventCategory === 'Relay') &&
-		Array.isArray(event.Rounds) && event.Rounds.every((round) =>
-			typeof round.Name === 'string' && typeof round.RoundTypeCategory === 'string' &&
-			Array.isArray(round.Heats) && round.Heats.every((heat) => Array.isArray(heat.Allocations)) &&
-			(round.TotalResults === undefined || Array.isArray(round.TotalResults)));
 }
 
 export async function getCompetitions(): Promise<CompetitionList[]> {
@@ -37,15 +30,11 @@ export async function getCompetitionDetails(compId: number): Promise<Competition
 }
 
 export async function getResults(compId: number): Promise<EventDetail[]> {
-	if (compId === 17448) {
-		const snapshot = await import('./sfim-2025.fixture.json');
-		return snapshot.default as unknown as EventDetail[];
-	}
-	if (compId === 19929) {
-		// The finalized 2026 feed is pinned locally so its event ledger stays
-		// available after Tuloslista eventually retires the old API record.
-		const snapshot = await import('./sfim-2026.fixture.json');
-		return snapshot.default as unknown as EventDetail[];
+	const archive = getPinnedArchive(compId);
+	if (archive) {
+		const load = ARCHIVE_FIXTURES[`./sfim-${archive.year}.fixture.json`];
+		if (!load) throw new Error(`Missing pinned results for ${archive.year}`);
+		return (await load()).default as EventDetail[];
 	}
 	const events = await getEvents(compId);
 	const eventIds = [...new Set(Object.values(events).flat().map((e) => e.EventId))];

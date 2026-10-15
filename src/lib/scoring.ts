@@ -5,17 +5,33 @@ import type {
 	ClubEventScore,
 	TrophyResult,
 	Allocation,
+	Attempt,
 	PerformanceClass,
+	Round,
 } from './types.js';
 import { classifyResult, isCentimetreEvent, isCombinedEvent, isJuniorGroup, normalizeEventName } from './classification.js';
+
+// A start list is not a result. Non-results such as DNS and DQ still record
+// an outcome, so they count when selecting rounds and checking refreshes.
+export function roundHasResults(round: Round): boolean {
+	return [...(round.TotalResults ?? []), ...round.Heats.flatMap((heat) => heat.Allocations)]
+		.some((allocation) => Boolean(allocation.Result?.trim()));
+}
 
 const INVALID_RESULTS = new Set(['DNS', 'DQ', 'DNF', 'DSQ', 'NH', 'NM', '']);
 
 type FieldTieBreaker = {
 	marks: number[];
+	// Vertical events only: attempts at the last cleared height and failures
+	// up to and including it (World Athletics TR 26.8).
 	misses: number;
 	attempts: number;
 	vertical: boolean;
+};
+
+type RankedAllocation = {
+	allocation: Allocation;
+	heatWind: string | null;
 };
 
 type InternalScoredResult = ScoredResult & {
@@ -32,21 +48,25 @@ function parseWind(value: string | null | undefined): number | null {
 	return Number(value.replace(',', '.'));
 }
 
-function classificationValue(event: EventDetail, allocation: Allocation, parsedValue: number | null): number | null {
+function classificationValue(event: EventDetail, entry: RankedAllocation, parsedValue: number | null): number | null {
 	if (parsedValue === null) return null;
 	const eventKey = normalizeEventName(event.Name);
-	if (!WIND_EVENTS.has(eventKey) || (parseWind(allocation.Wind) ?? 0) <= WIND_LIMIT) return parsedValue;
-	if (eventKey !== 'longJump' && eventKey !== 'tripleJump') return null;
+	if (!WIND_EVENTS.has(eventKey)) return parsedValue;
+
+	// Sprint and hurdle rows may only carry the heat's wind reading.
+	const wind = parseWind(entry.allocation.Wind) ?? parseWind(entry.heatWind);
+	const isJump = eventKey === 'longJump' || eventKey === 'tripleJump';
+	// A missing reading is treated as legal: the feed omits wind for some rows.
+	if (!isJump) return wind === null || wind <= WIND_LIMIT ? parsedValue : null;
+	if (wind !== null && wind <= WIND_LIMIT) return parsedValue;
 
 	// A wind-assisted winning jump still determines placing, but not the result class.
 	// A lower, wind-legal attempt can independently meet the classification mark.
-	const legalMarks = (allocation.Attempts ?? [])
-		.filter((attempt) => {
-			const wind = parseWind(attempt.Line2);
-			return wind !== null && wind <= WIND_LIMIT;
-		})
-		.map((attempt) => parseFieldResult(attempt.Line1, event.Name))
-		.filter((mark): mark is number => mark !== null);
+	const windedMarks = (entry.allocation.Attempts ?? [])
+		.map((attempt) => ({ wind: parseWind(attempt.Line2), mark: parseFieldResult(attempt.Line1, event.Name) }))
+		.filter((attempt): attempt is { wind: number; mark: number } => attempt.wind !== null && attempt.mark !== null);
+	if (wind === null && windedMarks.length === 0) return parsedValue;
+	const legalMarks = windedMarks.filter((attempt) => attempt.wind <= WIND_LIMIT).map((attempt) => attempt.mark);
 	return legalMarks.length > 0 ? Math.max(...legalMarks) : null;
 }
 
@@ -54,26 +74,32 @@ function parseFinishTimeToMs(value: string | null | undefined): number | null {
 	const trimmed = value?.trim() ?? '';
 	if (trimmed === '') return null;
 	const colonParts = trimmed.split(':');
-	if (colonParts.length >= 2 && colonParts.every((part) => /^\d+(?:[.,]\d+)?$/.test(part))) {
-		const seconds = Number(colonParts.at(-1)!.replace(',', '.'));
-		const minutes = colonParts.slice(0, -1).reduce((total, part) => total * 60 + Number(part), 0);
+	if (colonParts.length >= 2) {
+		const leading = colonParts.slice(0, -1);
+		const secondsPart = colonParts.at(-1)!;
+		if (!leading.every((part) => /^\d+$/.test(part)) || !/^\d{1,2}(?:[.,]\d+)?$/.test(secondsPart)) return null;
+		const seconds = Number(secondsPart.replace(',', '.'));
+		if (seconds >= 60 || leading.slice(1).some((part) => Number(part) >= 60)) return null;
+		const minutes = leading.reduce((total, part) => total * 60 + Number(part), 0);
 		return minutes * 60000 + Math.round(seconds * 1000);
 	}
 
+	// Tuloslista writes longer times as minutes.seconds,hundredths (e.g. 2.05,32).
 	const minuteFormat = trimmed.match(/^(\d+)[.,](\d{1,2})[.,](\d{1,2})$/);
 	if (minuteFormat) {
-		const [, minutes, seconds, hundredths] = minuteFormat;
-		return (+minutes * 60 + +seconds) * 1000 + +hundredths * 10;
+		const [, minutes, seconds, fraction] = minuteFormat;
+		if (+seconds >= 60) return null;
+		return (+minutes * 60 + +seconds) * 1000 + +fraction.padEnd(2, '0') * 10;
 	}
 
-	const num = Number(trimmed.replace(',', '.'));
-	return Number.isFinite(num) ? Math.round(num * 1000) : null;
+	if (!/^\d+(?:[.,]\d+)?$/.test(trimmed)) return null;
+	return Math.round(Number(trimmed.replace(',', '.')) * 1000);
 }
 
 function parseFieldResult(value: string | null | undefined, eventName: string): number | null {
 	const cleaned = value?.trim().replace(',', '.') ?? '';
+	if (!/^\d+(?:\.\d+)?$/.test(cleaned)) return null;
 	const num = Number(cleaned);
-	if (!Number.isFinite(num)) return null;
 
 	// Tuloslista reports high jump and pole vault in centimetres (e.g. 162 or
 	// 445), while the other field events are normally reported in metres.
@@ -87,29 +113,23 @@ function getFieldTieBreaker(eventName: string, attempts: NonNullable<Allocation[
 		.map((attempt) => parseFieldResult(attempt.Line1, eventName))
 		.filter((mark): mark is number => mark !== null)
 		.sort((a, b) => b - a);
-	const misses = attempts.reduce((total, attempt) => {
-		const line1 = String(attempt.Line1 ?? '').trim().toLowerCase();
-		const line2 = String(attempt.Line2 ?? '').trim().toLowerCase();
-		const statusMisses = (line2.match(/x/g) ?? []).length;
-		return total + statusMisses + (line2 === '' && (line1 === '' || line1 === '-' || line1.includes('x')) ? 1 : 0);
-	}, 0);
+	if (!vertical) return { marks, misses: 0, attempts: 0, vertical };
 
-	if (vertical) {
-		const clearedHeights = attempts
-			.filter((attempt) => String(attempt.Line2 ?? '').toLowerCase().includes('o'))
-			.map((attempt) => parseFieldResult(attempt.Line1, eventName))
-			.filter((height): height is number => height !== null);
-		const bestClearedHeight = Math.max(...clearedHeights, 0);
-		const bestHeight = attempts.find(
-			(attempt) => parseFieldResult(attempt.Line1, eventName) === bestClearedHeight
-		);
-		const attemptsAtBest = bestHeight
-			? (String(bestHeight.Line2 ?? '').match(/x/g) ?? []).length + 1
-			: 0;
-		return { marks, misses, attempts: attemptsAtBest, vertical };
-	}
-
-	return { marks, misses, attempts: attempts.length, vertical };
+	const countFailures = (attempt: Attempt) => (String(attempt.Line2 ?? '').toLowerCase().match(/x/g) ?? []).length;
+	const clearedHeights = attempts
+		.filter((attempt) => String(attempt.Line2 ?? '').toLowerCase().includes('o'))
+		.map((attempt) => parseFieldResult(attempt.Line1, eventName))
+		.filter((height): height is number => height !== null);
+	const bestClearedHeight = Math.max(...clearedHeights, 0);
+	const bestHeight = attempts.find(
+		(attempt) => parseFieldResult(attempt.Line1, eventName) === bestClearedHeight
+	);
+	const attemptsAtBest = bestHeight ? countFailures(bestHeight) + 1 : 0;
+	// Failures above the last cleared height do not separate tied athletes.
+	const misses = attempts
+		.filter((attempt) => (parseFieldResult(attempt.Line1, eventName) ?? Infinity) <= bestClearedHeight)
+		.reduce((total, attempt) => total + countFailures(attempt), 0);
+	return { marks, misses, attempts: attemptsAtBest, vertical };
 }
 
 function parseResult(value: string | null | undefined, eventName: string, category: 'Track' | 'Field' | 'Relay'): number | null {
@@ -118,14 +138,20 @@ function parseResult(value: string | null | undefined, eventName: string, catego
 	return parseFieldResult(value, eventName);
 }
 
+// A result scores when it is in competition and parses to a real mark
+// (parseResult returns null for unreadable marks and -1 for DNS/DQ/DNF).
+function isScoringResult(allocation: Allocation, value: number | null): boolean {
+	return !allocation.NotInCompetition && value !== null && value !== -1 && value !== 0;
+}
+
 function getGender(group: string): 'male' | 'female' {
 	const upper = group.toUpperCase().trim();
 	if (upper.startsWith('M') || upper.startsWith('H') || upper.startsWith('P')) return 'male';
 	return 'female';
 }
 
-const SENIOR_PLACEMENT_POINTS = [7, 5, 4, 3, 2, 1];
-const JUNIOR_PLACEMENT_POINTS = [3, 2, 1];
+export const SENIOR_PLACEMENT_POINTS = [7, 5, 4, 3, 2, 1];
+export const JUNIOR_PLACEMENT_POINTS = [3, 2, 1];
 
 function getPlacementPointsForPosition(pos: number, points: number[]): number {
 	return pos >= 1 && pos <= points.length ? points[pos - 1] : 0;
@@ -140,20 +166,21 @@ function getAveragePlacementPoints(startPlacement: number, tieCount: number, poi
 	return total / tieCount;
 }
 
+// Result bonuses per trophy. Junior Frihetspriset bonuses need a top-three placing.
+export const FRIHET_SENIOR_BONUS = { SM: 15, M: 10, A: 5 } as const;
+export const FRIHET_JUNIOR_A_BONUS = 3;
+export const FRIHET_JUNIOR_BONUS_MAX_PLACE = 3;
+export const YOUTH_A_BONUS = 5;
+
 function getFrihetsprisetResultPoints(perfClass: string, ageClass: 'senior' | 'junior', placement: number): number {
 	if (ageClass === 'junior') {
-		if (perfClass === 'A' && placement <= 3) return 3;
-		return 0;
+		return perfClass === 'A' && placement <= FRIHET_JUNIOR_BONUS_MAX_PLACE ? FRIHET_JUNIOR_A_BONUS : 0;
 	}
-	if (perfClass === 'SM') return 15;
-	if (perfClass === 'M') return 10;
-	if (perfClass === 'A') return 5;
-	return 0;
+	return FRIHET_SENIOR_BONUS[perfClass as keyof typeof FRIHET_SENIOR_BONUS] ?? 0;
 }
 
 function getUngdomspokalenResultPoints(perfClass: string): number {
-	if (perfClass === 'A') return 5;
-	return 0;
+	return perfClass === 'A' ? YOUTH_A_BONUS : 0;
 }
 
 function compareFieldTieBreakers(a: FieldTieBreaker, b: FieldTieBreaker): number {
@@ -163,17 +190,23 @@ function compareFieldTieBreakers(a: FieldTieBreaker, b: FieldTieBreaker): number
 		return 0;
 	}
 
+	// Horizontal ties stay tied once every valid mark has been compared
+	// (World Athletics TR 25.22); fouls do not separate athletes.
 	const length = Math.max(a.marks.length, b.marks.length);
 	for (let i = 0; i < length; i++) {
 		const aMark = a.marks[i] ?? 0;
 		const bMark = b.marks[i] ?? 0;
 		if (aMark !== bMark) return bMark - aMark;
 	}
-	if (a.misses !== b.misses) return a.misses - b.misses;
-	return a.attempts - b.attempts;
+	return 0;
 }
 
+// Official ranks are used only when every valid result in the event has one;
+// otherwise the whole event is ranked by marks, so the order stays consistent.
 function sortResults(results: InternalScoredResult[]): InternalScoredResult[] {
+	if (results.some((result) => result.officialRank === null)) {
+		for (const result of results) result.officialRank = null;
+	}
 	return [...results].sort((a, b) => {
 		if (a.officialRank !== null && b.officialRank !== null) {
 			return a.officialRank - b.officialRank;
@@ -187,30 +220,67 @@ function sortResults(results: InternalScoredResult[]): InternalScoredResult[] {
 	});
 }
 
-function getAllocations(event: EventDetail): Allocation[] {
-	const rounds = event.Rounds.filter((r) => r.RoundTypeCategory === 'Final');
-	return (rounds.length ? rounds : event.Rounds).flatMap((round) =>
-		round.TotalResults?.length ? round.TotalResults : round.Heats.flatMap((heat) => heat.Allocations)
-	);
+// Scores one stage only. Until a final records an outcome, the latest round
+// with results gives provisional standings. Keep start lists if no round has results.
+function getAllocations(event: EventDetail): { entries: RankedAllocation[]; eventWideRanks: boolean } {
+	const finals = event.Rounds.filter((r) => r.RoundTypeCategory === 'Final' && roundHasResults(r));
+	const latest = event.Rounds.filter(roundHasResults).at(-1) ?? event.Rounds.at(-1);
+	const rounds = finals.length ? finals : latest ? [latest] : [];
+	let incompleteSummary = false;
+
+	const entries = rounds.flatMap((round): RankedAllocation[] => {
+		const heatWindById = new Map<number, string | null>();
+		for (const heat of round.Heats) {
+			for (const allocation of heat.Allocations) heatWindById.set(allocation.Id, heat.Wind ?? null);
+		}
+		const heatEntries = round.Heats.flatMap((heat) => heat.Allocations.map((allocation) => ({ allocation, heatWind: heat.Wind ?? null })));
+		if (!round.TotalResults?.length) return heatEntries;
+
+		// The combined list can lag behind the heats. Heat rows it is missing
+		// are added, and the event is then ranked by marks (see sortResults).
+		const summarized = new Set(round.TotalResults.map((allocation) => allocation.Id));
+		const missing = heatEntries.filter((entry) => !summarized.has(entry.allocation.Id));
+		const isScoringEntry = ({ allocation }: RankedAllocation) =>
+			isScoringResult(allocation, parseResult(allocation.Result, event.Name, event.EventCategory));
+		if (missing.some(isScoringEntry)) incompleteSummary = true;
+		const heatById = new Map(heatEntries.map((entry) => [entry.allocation.Id, entry]));
+		return [
+			...round.TotalResults.map((allocation) => {
+				const heatEntry = heatById.get(allocation.Id);
+				if (!allocation.Result?.trim() && heatEntry?.allocation.Result?.trim()) {
+					// A summary start-list row can lag behind a recorded heat outcome.
+					if (isScoringEntry(heatEntry)) incompleteSummary = true;
+					return heatEntry;
+				}
+				return { allocation, heatWind: heatWindById.get(allocation.Id) ?? null };
+			}),
+			...missing,
+		];
+	});
+
+	// Ranks in separate preliminary heats are heat-local, not event-wide.
+	const eventWideRanks = !incompleteSummary && (finals.length > 0 || rounds.every((round) => Boolean(round.TotalResults?.length) || round.Heats.length <= 1));
+	return { entries, eventWideRanks };
 }
 
 export function scoreEvent(event: EventDetail): ScoredResult[] {
-	const allAllocs = getAllocations(event);
+	const { entries, eventWideRanks } = getAllocations(event);
 	const group = event.Group || event.Name;
 	const ageClass = isJuniorGroup(group) ? 'junior' : 'senior';
 	const gender = getGender(group);
 
-	const scored: InternalScoredResult[] = allAllocs.map((a) => {
+	const scored: InternalScoredResult[] = entries.map((entry) => {
+		const a = entry.allocation;
 		const parsedValue = parseResult(a.Result, event.Name, event.EventCategory);
-		const isValid = !a.NotInCompetition && parsedValue !== null && parsedValue !== -1 && parsedValue !== 0;
+		const isValid = isScoringResult(a, parsedValue);
 
 		return {
 			athleteName: a.Name,
 			club: a.Organization,
 			result: a.Result ?? '',
 			fieldTieBreaker: getFieldTieBreaker(event.Name, a.Attempts ?? []),
-			officialRank: Number.isInteger(a.ResultRank) && (a.ResultRank ?? 0) > 0 ? a.ResultRank! : null,
-			classificationValue: classificationValue(event, a, parsedValue),
+			officialRank: eventWideRanks && Number.isInteger(a.ResultRank) && (a.ResultRank ?? 0) > 0 ? a.ResultRank! : null,
+			classificationValue: classificationValue(event, entry, parsedValue),
 			parsedValue: parsedValue ?? 0,
 			category: event.EventCategory,
 			ageClass,
@@ -300,15 +370,22 @@ function toClubEventScore(event: EventDetail, result: ScoredResult): ClubEventSc
 	};
 }
 
-function addClubPoints(clubs: Map<number, ClubScore>, event: EventDetail, results: ScoredResult[]): void {
+// Tuloslista uses Id 0 for clubs without a registry entry, so those are kept
+// apart by name rather than merged into one club.
+function clubKey(club: ScoredResult['club']): string {
+	return club.Id > 0 ? `id:${club.Id}` : `name:${club.Name.trim().toLowerCase()}`;
+}
+
+function addClubPoints(clubs: Map<string, ClubScore>, event: EventDetail, results: ScoredResult[]): void {
 	for (const result of results) {
 		if (!result.isValid || result.totalPoints <= 0) continue;
-		const existing = clubs.get(result.club.Id);
+		const key = clubKey(result.club);
+		const existing = clubs.get(key);
 		if (existing) {
 			existing.totalPoints += result.totalPoints;
 			existing.events.push(toClubEventScore(event, result));
 		} else {
-			clubs.set(result.club.Id, {
+			clubs.set(key, {
 				club: result.club,
 				totalPoints: result.totalPoints,
 				events: [toClubEventScore(event, result)],
@@ -317,10 +394,26 @@ function addClubPoints(clubs: Map<number, ClubScore>, event: EventDetail, result
 	}
 }
 
-function finishTrophy(trophy: TrophyResult['trophy'], clubs: Map<number, ClubScore>, eventBreakdown: TrophyResult['eventBreakdown']): TrophyResult {
+// Split placement points (e.g. 16 / 3) leave floating-point noise in sums.
+function samePoints(a: number, b: number): boolean {
+	return Math.abs(a - b) < 1e-9;
+}
+
+// Competition ranking for the club table: equal totals share a position and
+// the next club skips accordingly (1, 2, 2, 4).
+export function clubPositions(rankings: { totalPoints: number }[]): number[] {
+	return rankings.map((club, index) => {
+		let first = index;
+		while (first > 0 && samePoints(rankings[first - 1].totalPoints, club.totalPoints)) first--;
+		return first + 1;
+	});
+}
+
+function finishTrophy(trophy: TrophyResult['trophy'], clubs: Map<string, ClubScore>, eventBreakdown: TrophyResult['eventBreakdown']): TrophyResult {
 	return {
 		trophy,
-		rankings: [...clubs.values()].sort((a, b) => b.totalPoints - a.totalPoints),
+		rankings: [...clubs.values()].sort((a, b) =>
+			samePoints(a.totalPoints, b.totalPoints) ? a.club.Name.localeCompare(b.club.Name) : b.totalPoints - a.totalPoints),
 		eventBreakdown,
 	};
 }
@@ -328,15 +421,20 @@ function finishTrophy(trophy: TrophyResult['trophy'], clubs: Map<number, ClubSco
 // Single scoring seam for the live view and historical archive. Both trophies
 // share the same parsed result, rank and performance class for each athlete.
 export function computeChampionship(events: EventDetail[]): { frihetspriset: TrophyResult; ungdomspokalen: TrophyResult } {
-	const frihetClubs = new Map<number, ClubScore>();
-	const youthClubs = new Map<number, ClubScore>();
+	const frihetClubs = new Map<string, ClubScore>();
+	const youthClubs = new Map<string, ClubScore>();
 	const frihetEvents: TrophyResult['eventBreakdown'] = [];
 	const youthEvents: TrophyResult['eventBreakdown'] = [];
 
 	for (const event of events) {
 		const results = scoreEvent(event);
-		frihetEvents.push({ eventName: event.Name, eventId: event.Id, results });
-		if (!isCombinedEvent(event.Name)) addClubPoints(frihetClubs, event, results);
+		// Combined events keep their placings but award no Frihetspriset points,
+		// so the event breakdown matches the club totals.
+		const frihetResults = isCombinedEvent(event.Name)
+			? results.map((result) => ({ ...result, placementPoints: 0, resultPoints: 0, totalPoints: 0 }))
+			: results;
+		frihetEvents.push({ eventName: event.Name, eventId: event.Id, results: frihetResults });
+		addClubPoints(frihetClubs, event, frihetResults);
 		if (!isJuniorGroup(event.Group || event.Name)) continue;
 
 		const youthResults = results.map((result) => {
@@ -352,12 +450,4 @@ export function computeChampionship(events: EventDetail[]): { frihetspriset: Tro
 		frihetspriset: finishTrophy('frihetspriset', frihetClubs, frihetEvents),
 		ungdomspokalen: finishTrophy('ungdomspokalen', youthClubs, youthEvents),
 	};
-}
-
-export function computeFrihetspriset(events: EventDetail[]): TrophyResult {
-	return computeChampionship(events).frihetspriset;
-}
-
-export function computeUngdomspokalen(events: EventDetail[]): TrophyResult {
-	return computeChampionship(events).ungdomspokalen;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeFrihetspriset, computeUngdomspokalen, scoreEvent } from './scoring.js';
+import { scoreEvent, computeChampionship } from './scoring.js';
 import { getResults } from './api.js';
 import type { EventDetail } from './types.js';
 import snapshot from './sfim-2025.fixture.json';
@@ -16,13 +16,13 @@ describe('2025 result-feed regression', () => {
 		const event = events.find((item) => item.Name === 'F15 100m')!;
 		expect(event.Group).toBe('T15');
 		expect(scoreEvent(event).find((result) => result.isValid)?.ageClass).toBe('junior');
-		expect(computeUngdomspokalen([event]).eventBreakdown).toHaveLength(1);
-		expect(computeFrihetspriset([event]).eventBreakdown).toHaveLength(1);
+		expect(computeChampionship([event]).ungdomspokalen.eventBreakdown).toHaveLength(1);
+		expect(computeChampionship([event]).frihetspriset.eventBreakdown).toHaveLength(1);
 	});
 
 	it('matches the published 2025 winning and runner-up club totals', () => {
-		const frihet = computeFrihetspriset(events);
-		const youth = computeUngdomspokalen(events);
+		const frihet = computeChampionship(events).frihetspriset;
+		const youth = computeChampionship(events).ungdomspokalen;
 		for (const [name, points] of [['HIFK Friidrott', 253], ['IF Sibbo-Vargarna', 180.5]] as const) {
 			expect(frihet.rankings.find((club) => club.club.Name === name)?.totalPoints).toBe(points);
 		}
